@@ -92,7 +92,18 @@ export function PreferencesPage() {
         setError('A location cannot be both preferred and excluded')
         return
       }
-      const body = { ...form, ...lists, recordVersion: exists ? form.recordVersion : undefined }
+      const body = {
+        ...lists,
+        minimumExperienceYears: form.minimumExperienceYears,
+        maximumExperienceYears: form.maximumExperienceYears,
+        minimumMatchScore: form.minimumMatchScore,
+        maximumDailyShortlist: form.maximumDailyShortlist,
+        maximumDailyApplications: form.maximumDailyApplications,
+        remoteAllowed: form.remoteAllowed,
+        hybridAllowed: form.hybridAllowed,
+        onsiteAllowed: form.onsiteAllowed,
+        recordVersion: exists ? form.recordVersion : undefined,
+      }
       const saved = await profileApi.savePreferences(body)
       setForm(saved)
       setListInputs(listInputsFrom(saved))
