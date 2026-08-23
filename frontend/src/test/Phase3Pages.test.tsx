@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { jobSourcesApi } from '../api/jobSourcesApi'
 import { jobsApi } from '../api/jobsApi'
+import { matchingApi, type MatchingConfiguration } from '../api/matchingApi'
 import { jobFormToInput, jobToForm } from '../utils/jobForms'
 import { regionsFor } from '../utils/jobSourceForms'
 import { JobSourceDetailPage } from '../pages/JobSourceDetailPage'
@@ -11,11 +12,13 @@ import { JobSourcesPage } from '../pages/JobSourcesPage'
 import { JobDetailPage } from '../pages/JobDetailPage'
 import { JobsPage } from '../pages/JobsPage'
 import { NewJobPage } from '../pages/NewJobPage'
+import { MatchingSettingsPage } from '../pages/MatchingSettingsPage'
 import type { JobPosting, JobSourceConfiguration, JobSourceRun, PagedResponse } from '../types/jobs'
 
 const source: JobSourceConfiguration = { id: 'source-1', displayName: 'Fictional Lever Board', sourceType: 'LEVER', providerIdentifier: 'fictional-company', region: 'GLOBAL', enabled: true, pageSize: 50, maximumPagesPerRun: 10, missingRunThreshold: 2, consecutiveFailureCount: 0, recordVersion: 1, createdAt: '2026-08-01T00:00:00Z', updatedAt: '2026-08-01T00:00:00Z' }
 const run: JobSourceRun = { id: 'run-1', sourceId: source.id, triggerType: 'MANUAL', status: 'SUCCEEDED', startedAt: '2026-08-22T10:00:00Z', completedAt: '2026-08-22T10:00:02Z', discoveredCount: 4, createdCount: 2, updatedCount: 1, unchangedCount: 0, duplicateCount: 1, failedCount: 0, removedCount: 0, createdAt: '2026-08-22T10:00:00Z' }
 const job: JobPosting = { id: 'job-1', sourceId: source.id, sourceType: 'LEVER', externalId: 'posting-1', company: 'Fictional Company', title: 'Backend Engineer', location: 'Noida', countryCode: 'IN', workplaceType: 'HYBRID', employmentType: 'FULL_TIME', descriptionPlainText: 'Build a fictional service.', descriptionTruncated: false, applyUrl: 'https://jobs.example.test/apply/1', sourceUrl: 'https://jobs.example.test/posting/1', publishedAt: '2026-08-20T08:00:00Z', firstSeenAt: '2026-08-22T10:00:00Z', lastSeenAt: '2026-08-22T10:00:00Z', missingSuccessfulRunCount: 0, fingerprint: 'fingerprint', contentHash: 'content-hash', status: 'READY_FOR_EVALUATION', manuallyEdited: false, recordVersion: 0, createdAt: '2026-08-22T10:00:00Z', updatedAt: '2026-08-22T10:00:00Z' }
+const matchingConfiguration: MatchingConfiguration = { id: 'matching-1', profileId: 'profile-1', skillsWeight: 35, experienceWeight: 20, roleWeight: 15, locationWeight: 15, domainWeight: 10, compensationWeight: 5, strongApplyThreshold: 85, applyThreshold: 75, manualReviewThreshold: 60, maximumAllowedExperienceGap: 1, maximumJobsPerBatch: 25, maximumDailyAiRequests: 100, maximumDailyInputTokens: 500000, rulesetVersion: 'v1', recordVersion: 2, createdAt: '2026-08-01T00:00:00Z', updatedAt: '2026-08-02T00:00:00Z' }
 const emptyPage = <T,>(content: T[] = []): PagedResponse<T> => ({ content, page: 0, size: 20, totalElements: content.length, totalPages: content.length ? 1 : 0 })
 
 function router(element: React.ReactNode, initial = '/') {
@@ -31,6 +34,21 @@ beforeEach(() => vi.restoreAllMocks())
 afterEach(() => vi.useRealTimers())
 
 describe('Phase 3 source pages', () => {
+  it('updates matching settings without sending response-only fields', async () => {
+    vi.spyOn(matchingApi, 'get').mockResolvedValue(matchingConfiguration)
+    const put = vi.spyOn(matchingApi, 'put').mockResolvedValue(matchingConfiguration)
+    router(<MatchingSettingsPage />)
+    await screen.findByDisplayValue('500000')
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+    await waitFor(() => expect(put).toHaveBeenCalled())
+    const request = put.mock.calls[0][0] as Record<string, unknown>
+    expect(request).toMatchObject({ skillsWeight: 35, recordVersion: 2, rulesetVersion: 'v1' })
+    expect(request).not.toHaveProperty('id')
+    expect(request).not.toHaveProperty('profileId')
+    expect(request).not.toHaveProperty('createdAt')
+    expect(request).not.toHaveProperty('updatedAt')
+  })
+
   it('creates a provider-specific source without an arbitrary URL field', async () => {
     vi.spyOn(jobSourcesApi, 'list').mockResolvedValue([])
     vi.spyOn(jobSourcesApi, 'runs').mockResolvedValue(emptyPage())
