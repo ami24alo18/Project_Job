@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import jakarta.validation.constraints.*;public record TrackerStatusRequest(@NotNull ApplicationTrackingStatus status,@NotNull Long recordVersion,@Size(min=3,max=1000)String correctionNote){}

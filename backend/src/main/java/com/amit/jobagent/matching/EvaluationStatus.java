@@ -1,0 +1,1 @@
+package com.amit.jobagent.matching;public enum EvaluationStatus{QUEUED,RULE_FILTERED,AI_PENDING,AI_RUNNING,SUCCEEDED,NEEDS_REVIEW,FAILED,STALE,CANCELLED}

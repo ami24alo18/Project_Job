@@ -1,0 +1,3 @@
+package com.amit.jobagent.matching;
+import jakarta.validation.constraints.*;
+public record MatchingConfigurationRequest(@Min(0)@Max(100)int skillsWeight,@Min(0)@Max(100)int experienceWeight,@Min(0)@Max(100)int roleWeight,@Min(0)@Max(100)int locationWeight,@Min(0)@Max(100)int domainWeight,@Min(0)@Max(100)int compensationWeight,@Min(0)@Max(100)int strongApplyThreshold,@Min(0)@Max(100)int applyThreshold,@Min(0)@Max(100)int manualReviewThreshold,@Min(0)@Max(100)int maximumAllowedExperienceGap,@Min(1)@Max(500)int maximumJobsPerBatch,@Min(1)@Max(10000)int maximumDailyAiRequests,@Min(1)@Max(1000000000)long maximumDailyInputTokens,@NotBlank@Size(max=40)String rulesetVersion,Long recordVersion){}

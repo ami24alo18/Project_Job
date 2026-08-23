@@ -1,0 +1,2 @@
+package com.amit.jobagent.matching;import java.util.*;import org.springframework.data.jpa.repository.JpaRepository;
+interface JobEvaluationRepository extends JpaRepository<JobEvaluation,UUID>{List<JobEvaluation>findByJobIdOrderByCreatedAtDesc(UUID jobId);Optional<JobEvaluation>findFirstByJobIdAndCompletedAtIsNotNullOrderByCompletedAtDesc(UUID jobId);Optional<JobEvaluation>findFirstByCacheKeyAndStatusIn(String key,Collection<EvaluationStatus>statuses);}

@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import jakarta.validation.constraints.*;public record HandoffStateRequest(@NotNull Long recordVersion,@Size(max=200)String externalReference,@Size(max=1000)String note){}

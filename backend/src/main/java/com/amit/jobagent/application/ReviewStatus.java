@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;public enum ReviewStatus{NOT_READY,PENDING_REVIEW,CHANGES_REQUESTED,APPROVED_FOR_HANDOFF,REJECTED,INVALIDATED}

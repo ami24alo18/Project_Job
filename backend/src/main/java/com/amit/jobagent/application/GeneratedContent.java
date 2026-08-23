@@ -1,0 +1,6 @@
+package com.amit.jobagent.application;
+import com.amit.jobagent.common.persistence.MutableEntity;import jakarta.persistence.*;import java.util.UUID;
+@Entity @Table(name="generated_content")class GeneratedContent extends MutableEntity{
+ @Column(name="package_revision_id",nullable=false,updatable=false)UUID revisionId;@Enumerated(EnumType.STRING)@Column(name="content_type",nullable=false,updatable=false,length=40)GeneratedContentType type;@Column(name="content_key",nullable=false,updatable=false,length=150)String key;@Column(name="section_order",nullable=false)int order;@Column(nullable=false,columnDefinition="text")String text;@Enumerated(EnumType.STRING)@Column(nullable=false,length=30)ContentOrigin origin;@Enumerated(EnumType.STRING)@Column(name="verification_status",nullable=false,length=30)ContentVerificationStatus verification;@Column(name="user_edited",nullable=false)boolean userEdited;
+ protected GeneratedContent(){}GeneratedContent(UUID revision,GeneratedContentType type,String key,int order,String text,ContentOrigin origin,ContentVerificationStatus verification){revisionId=revision;this.type=type;this.key=key;this.order=order;this.text=text;this.origin=origin;this.verification=verification;}void edit(String value){text=value;origin=ContentOrigin.USER_EDITED;userEdited=true;verification=ContentVerificationStatus.UNVERIFIED;}
+}

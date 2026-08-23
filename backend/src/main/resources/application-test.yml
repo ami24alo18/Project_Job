@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:jobagent;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;INIT=CREATE SCHEMA IF NOT EXISTS job_agent
+    username: postgres
+    password:
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+job-agent:
+  allowed-frontend-origin: http://localhost:5173
+  n8n:
+    webhook-secret: test-n8n-secret
+  security:
+    username: test-user
+    password: test-password
+  documents:
+    maximum-size-bytes: 5242880
+  ingestion:
+    maximum-description-characters: 1000
+    maximum-response-bytes: 1048576
+    connect-timeout-millis: 250
+    request-timeout-millis: 500
+    maximum-retries: 1
+    retry-base-delay-millis: 1
+    executor-core-pool-size: 1
+    executor-maximum-pool-size: 1
+    executor-queue-capacity: 5
+    stale-run-after-minutes: 1

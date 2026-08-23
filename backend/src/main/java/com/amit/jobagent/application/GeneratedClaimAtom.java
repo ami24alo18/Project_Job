@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;public record GeneratedClaimAtom(String contentKey,String claimText,ClaimType claimType,List<UUID>factIds,List<UUID>requirementIds,String jobFieldReference){}

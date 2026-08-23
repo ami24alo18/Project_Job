@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;import org.springframework.data.jpa.repository.JpaRepository;interface ApplicationHandoffRepository extends JpaRepository<ApplicationHandoff,UUID>{Optional<ApplicationHandoff>findByIdempotencyHash(String hash);List<ApplicationHandoff>findByPackageIdInOrderByCreatedAtDesc(Collection<UUID>packageIds);}

@@ -1,0 +1,87 @@
+spring:
+  application:
+    name: job-agent-backend
+  servlet:
+    multipart:
+      max-file-size: ${RESUME_MAX_SIZE_BYTES:5242880}B
+      max-request-size: ${RESUME_MAX_SIZE_BYTES:5242880}B
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/job_agent}
+    username: ${DATABASE_USERNAME:job_agent}
+    password: ${DATABASE_PASSWORD:job_agent_local}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: job_agent
+  flyway:
+    default-schema: job_agent
+    schemas: job_agent
+server:
+  port: ${SERVER_PORT:8080}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+job-agent:
+  allowed-frontend-origin: ${ALLOWED_FRONTEND_ORIGIN:http://localhost:5173}
+  n8n:
+    webhook-secret: ${N8N_WEBHOOK_SECRET:local-n8n-change-me}
+  minio:
+    url: ${MINIO_URL:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin-change-me}
+    bucket: ${MINIO_BUCKET:job-agent-documents}
+  security:
+    username: ${APP_SECURITY_USERNAME:jobagent}
+    password: ${APP_SECURITY_PASSWORD:local-app-password-change-me}
+  documents:
+    maximum-size-bytes: ${RESUME_MAX_SIZE_BYTES:5242880}
+  ingestion:
+    maximum-description-characters: ${JOB_DESCRIPTION_MAX_CHARACTERS:100000}
+    maximum-response-bytes: ${JOB_SOURCE_MAX_RESPONSE_BYTES:5242880}
+    connect-timeout-millis: ${JOB_SOURCE_CONNECT_TIMEOUT_MILLIS:3000}
+    request-timeout-millis: ${JOB_SOURCE_REQUEST_TIMEOUT_MILLIS:10000}
+    maximum-retries: ${JOB_SOURCE_MAX_RETRIES:2}
+    retry-base-delay-millis: ${JOB_SOURCE_RETRY_BASE_DELAY_MILLIS:250}
+    executor-core-pool-size: ${JOB_SOURCE_EXECUTOR_CORE_SIZE:2}
+    executor-maximum-pool-size: ${JOB_SOURCE_EXECUTOR_MAX_SIZE:4}
+    executor-queue-capacity: ${JOB_SOURCE_EXECUTOR_QUEUE_CAPACITY:50}
+    stale-run-after-minutes: ${JOB_SOURCE_STALE_RUN_MINUTES:30}
+  ai:
+    enabled: ${AI_EVALUATION_ENABLED:false}
+    api-key: ${OPENAI_API_KEY:}
+    model: ${OPENAI_MODEL:gpt-5.6-terra}
+    reasoning-effort: ${OPENAI_REASONING_EFFORT:low}
+    timeout-seconds: ${OPENAI_TIMEOUT_SECONDS:30}
+    max-concurrent-requests: ${AI_MAX_CONCURRENT_REQUESTS:2}
+    max-daily-requests: ${AI_MAX_DAILY_REQUESTS:100}
+    max-daily-input-tokens: ${AI_MAX_DAILY_INPUT_TOKENS:500000}
+    max-input-characters: ${AI_MAX_INPUT_CHARACTERS:50000}
+    max-jobs-per-batch: ${AI_MAX_JOBS_PER_BATCH:25}
+  content-generation:
+    enabled: ${OPENAI_CONTENT_GENERATION_ENABLED:false}
+    automation-enabled: ${APPLICATION_PACKAGE_AUTOMATION_ENABLED:false}
+    model: ${OPENAI_CONTENT_GENERATION_MODEL:gpt-5.6-terra}
+    reasoning-effort: ${OPENAI_CONTENT_GENERATION_REASONING_EFFORT:low}
+    timeout: ${OPENAI_CONTENT_GENERATION_TIMEOUT:30s}
+    max-retries: ${OPENAI_CONTENT_GENERATION_MAX_RETRIES:1}
+    daily-limit: ${CONTENT_GENERATION_DAILY_LIMIT:20}
+    max-input-tokens: ${CONTENT_GENERATION_MAX_INPUT_TOKENS:24000}
+    max-output-tokens: ${CONTENT_GENERATION_MAX_OUTPUT_TOKENS:8000}
+    max-input-characters: ${CONTENT_GENERATION_MAX_INPUT_CHARACTERS:60000}
+    prompt-version: ${CONTENT_GENERATION_PROMPT_VERSION:v1}
+    schema-version: ${CONTENT_GENERATION_SCHEMA_VERSION:v1}
+    template-version: ${RESUME_TEMPLATE_VERSION:ats-single-column-v1}

@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.List;import java.util.UUID;public record HandoffEligibility(UUID packageId,UUID revisionId,boolean eligible,ReviewStatus reviewStatus,long reviewRecordVersion,List<BlockingReason>blockingReasons,String artifactManifestChecksum,String validationChecksum){}

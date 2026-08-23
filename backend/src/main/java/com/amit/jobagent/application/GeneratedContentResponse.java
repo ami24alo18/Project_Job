@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.time.Instant;import java.util.UUID;public record GeneratedContentResponse(UUID id,GeneratedContentType type,String key,int order,String text,ContentOrigin origin,ContentVerificationStatus verificationStatus,boolean userEdited,long recordVersion,Instant createdAt,Instant updatedAt){}

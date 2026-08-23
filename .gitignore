@@ -1,0 +1,12 @@
+.env
+!.env.example
+backend/target/
+.m2-cache/
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+*.log
+.idea/
+.vscode/
+*.iml
+.DS_Store

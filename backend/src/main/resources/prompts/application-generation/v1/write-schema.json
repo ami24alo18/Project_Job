@@ -1,0 +1,80 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contents", "claims", "warnings", "unsupportedRequirements"],
+  "properties": {
+    "contents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "key", "order", "text"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "RESUME_HEADLINE",
+              "PROFESSIONAL_SUMMARY",
+              "SKILL_SECTION",
+              "EXPERIENCE_BULLET",
+              "PROJECT_BULLET",
+              "EDUCATION_SECTION",
+              "COVER_LETTER",
+              "RECRUITER_MESSAGE",
+              "APPLICATION_ANSWER"
+            ]
+          },
+          "key": { "type": "string" },
+          "order": { "type": "integer" },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contentKey",
+          "claimText",
+          "claimType",
+          "factIds",
+          "requirementIds",
+          "jobFieldReference"
+        ],
+        "properties": {
+          "contentKey": { "type": "string" },
+          "claimText": { "type": "string" },
+          "claimType": {
+            "type": "string",
+            "enum": ["CANDIDATE_FACT", "JOB_REFERENCE", "NON_FACTUAL"]
+          },
+          "factIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            }
+          },
+          "requirementIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            }
+          },
+          "jobFieldReference": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "unsupportedRequirements": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

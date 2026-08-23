@@ -1,0 +1,1 @@
+package com.amit.jobagent.job;import java.time.Instant;import java.util.UUID;public record JobHandoffSnapshot(UUID id,String title,String company,String source,String canonicalApplyUrl,Instant expiresAt,JobPostingStatus status,String checksum){}

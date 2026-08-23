@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.time.*;import java.util.*;public record ApplicationTrackerResponse(UUID id,UUID handoffId,UUID jobId,UUID revisionId,ApplicationTrackingStatus status,Instant submittedAt,Instant lastActivityAt,Instant archivedAt,long recordVersion){}

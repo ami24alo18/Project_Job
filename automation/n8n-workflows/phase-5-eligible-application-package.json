@@ -1,0 +1,797 @@
+{
+  "name": "Phase 5 - Request eligible application package draft",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "phase-5/evaluation-completed",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "7444f168-48f8-4b2b-a9fa-e97398968e34",
+      "name": "Receive Completed Evaluation",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1220,
+        160
+      ],
+      "webhookId": "bdd96f46-5322-48b8-a77d-fe31331788cd",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_PHASE5_WEBHOOK_CREDENTIAL_ID",
+          "name": "Phase 5 evaluation hook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $json.body ?? $json;\nconst evaluationId = String(event.evaluationId ?? '').trim();\nconst jobId = String(event.jobId ?? '').trim();\nconst uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nif (!uuid.test(evaluationId) || !uuid.test(jobId)) {\n  throw new Error('Event must contain valid evaluationId and jobId UUIDs');\n}\nreturn [{ json: { evaluationId, jobId } }];"
+      },
+      "id": "a98bd45a-d011-42eb-b321-a269ced65f77",
+      "name": "Normalize Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1000,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'http://backend:8080/api/v1/job-evaluations/' + $json.evaluationId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "8fa214a8-e214-420f-88a0-9477dfafba48",
+      "name": "Fetch Authoritative Evaluation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -780,
+        160
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_WITH_BACKEND_BASIC_AUTH_CREDENTIAL_ID",
+          "name": "Job Agent backend"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const expected = $('Normalize Event').first().json;\nconst statusCode = Number($json.statusCode ?? 0);\nconst evaluation = $json.body && typeof $json.body === 'object' ? $json.body : {};\nlet reason = null;\nif (statusCode !== 200) reason = statusCode === 401 || statusCode === 403 ? 'AUTHORIZATION_FAILED' : `EVALUATION_LOOKUP_${statusCode || 'TRANSPORT_ERROR'}`;\nelse if (evaluation.id !== expected.evaluationId || evaluation.jobId !== expected.jobId) reason = 'EVENT_SOURCE_MISMATCH';\nelse if (evaluation.status !== 'SUCCEEDED') reason = 'EVALUATION_NOT_COMPLETED';\nelse if (evaluation.stale === true) reason = 'EVALUATION_STALE';\nelse if (!['STRONG_APPLY', 'APPLY'].includes(evaluation.recommendation)) reason = 'RECOMMENDATION_NOT_AUTOMATION_ELIGIBLE';\nreturn [{ json: { evaluationId: expected.evaluationId, jobId: expected.jobId, eligible: reason === null, reason } }];"
+      },
+      "id": "ecfd18cb-ebc6-4144-9602-f18cb43609e1",
+      "name": "Validate Eligible Evaluation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "591088c9-f875-4519-be11-3696615beb64",
+              "leftValue": "={{ $json.eligible }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "abbd3e97-7fe7-41b2-a60f-ef3dc57982eb",
+      "name": "Eligible?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -340,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://backend:8080/api/v1/jobs/' + $('Validate Eligible Evaluation').first().json.jobId + '/application-packages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'phase5-n8n-' + $('Validate Eligible Evaluation').first().json.evaluationId }}"
+            },
+            {
+              "name": "X-N8N-Automation",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { evaluationId: $('Validate Eligible Evaluation').first().json.evaluationId } }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 180000
+        }
+      },
+      "id": "21d2d2eb-a65b-4e00-8975-76393b95275a",
+      "name": "Request Draft Attempt 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -100,
+        60
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_WITH_BACKEND_BASIC_AUTH_CREDENTIAL_ID",
+          "name": "Job Agent backend"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const status = Number($json.statusCode ?? 0);\nconst body = $json.body && typeof $json.body === 'object' ? $json.body : {};\nif ([200, 201, 202].includes(status)) return [{ json: { outcome: 'SUCCESS', attempt: 1, httpStatus: status, packageId: body.id ?? null, packageStatus: body.status ?? 'REQUESTED' } }];\nif (status === 0 || [500, 502, 503, 504].includes(status)) return [{ json: { outcome: 'RETRY', attempt: 1, httpStatus: status, safeCode: status === 0 ? 'TRANSPORT_ERROR' : 'BACKEND_TRANSIENT_FAILURE' } }];\nreturn [{ json: { outcome: 'STOP', attempt: 1, httpStatus: status, safeCode: [401, 403].includes(status) ? 'AUTHORIZATION_FAILED' : status === 429 ? 'QUOTA_OR_RATE_POLICY' : 'VALIDATION_OR_POLICY_FAILURE' } }];"
+      },
+      "id": "d8101f39-dab0-46b5-9639-58ec0cdf2107",
+      "name": "Classify Attempt 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        120,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "11105bb2-c195-48c6-9d70-2be53490a92d",
+              "leftValue": "={{ $json.outcome }}",
+              "rightValue": "SUCCESS",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "885c5078-071f-46b9-b17a-594f0f2e8dc9",
+      "name": "Attempt 1 Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        340,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "43723540-249d-4459-b6c6-57fd8fcbf4e0",
+              "leftValue": "={{ $json.outcome }}",
+              "rightValue": "RETRY",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f4bedbf1-194b-43b9-94d3-e4473f5e9e0f",
+      "name": "Attempt 1 Transient?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        560,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "da9c994f-fd40-42b8-b96e-912e09f73c2d",
+      "name": "Wait Before Attempt 2",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        780,
+        100
+      ],
+      "webhookId": "b6a6b43f-6e1f-4179-b79e-062d260f5344"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://backend:8080/api/v1/jobs/' + $('Validate Eligible Evaluation').first().json.jobId + '/application-packages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'phase5-n8n-' + $('Validate Eligible Evaluation').first().json.evaluationId }}"
+            },
+            {
+              "name": "X-N8N-Automation",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { evaluationId: $('Validate Eligible Evaluation').first().json.evaluationId } }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 180000
+        }
+      },
+      "id": "f3f072db-58b6-46af-89ab-e031066709fc",
+      "name": "Request Draft Attempt 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        100
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_WITH_BACKEND_BASIC_AUTH_CREDENTIAL_ID",
+          "name": "Job Agent backend"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const status = Number($json.statusCode ?? 0);\nconst body = $json.body && typeof $json.body === 'object' ? $json.body : {};\nif ([200, 201, 202].includes(status)) return [{ json: { outcome: 'SUCCESS', attempt: 2, httpStatus: status, packageId: body.id ?? null, packageStatus: body.status ?? 'REQUESTED' } }];\nif (status === 0 || [500, 502, 503, 504].includes(status)) return [{ json: { outcome: 'RETRY', attempt: 2, httpStatus: status, safeCode: status === 0 ? 'TRANSPORT_ERROR' : 'BACKEND_TRANSIENT_FAILURE' } }];\nreturn [{ json: { outcome: 'STOP', attempt: 2, httpStatus: status, safeCode: [401, 403].includes(status) ? 'AUTHORIZATION_FAILED' : status === 429 ? 'QUOTA_OR_RATE_POLICY' : 'VALIDATION_OR_POLICY_FAILURE' } }];"
+      },
+      "id": "4aac8af5-c86a-4c15-8dde-a2b38405cc2e",
+      "name": "Classify Attempt 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0531006a-fe9a-4f9f-81df-d60244d62287",
+              "leftValue": "={{ $json.outcome }}",
+              "rightValue": "SUCCESS",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fefce723-2ccc-4bb9-b426-4d0f98764e88",
+      "name": "Attempt 2 Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ab019aae-ee39-4995-80bd-7caa7626a0dc",
+              "leftValue": "={{ $json.outcome }}",
+              "rightValue": "RETRY",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d915b808-3dd7-47b7-bc6a-846191219a2c",
+      "name": "Attempt 2 Transient?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1660,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "id": "7897033c-bc7b-4bdd-b913-b64f31dc8e15",
+      "name": "Wait Before Attempt 3",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1880,
+        140
+      ],
+      "webhookId": "77750bc3-b96d-431f-99ec-e4547503996a"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://backend:8080/api/v1/jobs/' + $('Validate Eligible Evaluation').first().json.jobId + '/application-packages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'phase5-n8n-' + $('Validate Eligible Evaluation').first().json.evaluationId }}"
+            },
+            {
+              "name": "X-N8N-Automation",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { evaluationId: $('Validate Eligible Evaluation').first().json.evaluationId } }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 180000
+        }
+      },
+      "id": "794edc35-63f5-4ece-938c-d2db518b0803",
+      "name": "Request Draft Attempt 3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2100,
+        140
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_WITH_BACKEND_BASIC_AUTH_CREDENTIAL_ID",
+          "name": "Job Agent backend"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const status = Number($json.statusCode ?? 0);\nconst body = $json.body && typeof $json.body === 'object' ? $json.body : {};\nif ([200, 201, 202].includes(status)) return [{ json: { outcome: 'SUCCESS', attempt: 3, httpStatus: status, packageId: body.id ?? null, packageStatus: body.status ?? 'REQUESTED' } }];\nif (status === 0 || [500, 502, 503, 504].includes(status)) return [{ json: { outcome: 'STOP', attempt: 3, httpStatus: status, safeCode: 'TRANSIENT_RETRY_EXHAUSTED' } }];\nreturn [{ json: { outcome: 'STOP', attempt: 3, httpStatus: status, safeCode: [401, 403].includes(status) ? 'AUTHORIZATION_FAILED' : status === 429 ? 'QUOTA_OR_RATE_POLICY' : 'VALIDATION_OR_POLICY_FAILURE' } }];"
+      },
+      "id": "0975db5d-1258-4895-a241-0e4cd822952d",
+      "name": "Classify Attempt 3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9120e32c-1bdd-4a5f-bab0-5a41ac848ad3",
+              "leftValue": "={{ $json.outcome }}",
+              "rightValue": "SUCCESS",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f392fb3d-9c95-4c9f-86d2-e6bc7eac61de",
+      "name": "Attempt 3 Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2540,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { result: 'PACKAGE_REQUEST_ACCEPTED', packageId: $json.packageId, packageStatus: $json.packageStatus, attempts: $json.attempt, httpStatus: $json.httpStatus } }];"
+      },
+      "id": "0a9196a6-9d43-4d8d-a56f-5ea246fa1abe",
+      "name": "Record Safe Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2780,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { result: 'PACKAGE_REQUEST_STOPPED', safeCode: $json.safeCode ?? 'POLICY_STOP', attempts: $json.attempt ?? 0, httpStatus: $json.httpStatus ?? null } }];"
+      },
+      "id": "d7f8728c-a078-4683-b848-2e6262174aec",
+      "name": "Record Safe Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { result: 'NOT_ELIGIBLE', safeCode: $json.reason, evaluationId: $json.evaluationId, jobId: $json.jobId } }];"
+      },
+      "id": "ebd1f886-dd8e-4c72-82e9-ea79a2fa6676",
+      "name": "Record Safe Ineligible Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -100,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Completed Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Normalize Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Event": {
+      "main": [
+        [
+          {
+            "node": "Fetch Authoritative Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Authoritative Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Validate Eligible Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Eligible Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Eligible?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eligible?": {
+      "main": [
+        [
+          {
+            "node": "Request Draft Attempt 1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Safe Ineligible Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Draft Attempt 1": {
+      "main": [
+        [
+          {
+            "node": "Classify Attempt 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Attempt 1": {
+      "main": [
+        [
+          {
+            "node": "Attempt 1 Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attempt 1 Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Record Safe Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Attempt 1 Transient?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attempt 1 Transient?": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Attempt 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Safe Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Attempt 2": {
+      "main": [
+        [
+          {
+            "node": "Request Draft Attempt 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Draft Attempt 2": {
+      "main": [
+        [
+          {
+            "node": "Classify Attempt 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Attempt 2": {
+      "main": [
+        [
+          {
+            "node": "Attempt 2 Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attempt 2 Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Record Safe Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Attempt 2 Transient?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attempt 2 Transient?": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Attempt 3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Safe Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Attempt 3": {
+      "main": [
+        [
+          {
+            "node": "Request Draft Attempt 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Draft Attempt 3": {
+      "main": [
+        [
+          {
+            "node": "Classify Attempt 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Attempt 3": {
+      "main": [
+        [
+          {
+            "node": "Attempt 3 Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attempt 3 Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Record Safe Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Safe Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "executionTimeout": 600
+  },
+  "versionId": "643fab59-84de-41a8-b7aa-af66c852db74",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

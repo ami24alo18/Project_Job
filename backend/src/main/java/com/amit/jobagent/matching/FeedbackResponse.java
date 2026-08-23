@@ -1,0 +1,1 @@
+package com.amit.jobagent.matching;import java.time.Instant;import java.util.UUID;public record FeedbackResponse(UUID id,UUID evaluationId,HumanLabel humanLabel,boolean wasRecommendationCorrect,String notes,long recordVersion,Instant createdAt,Instant updatedAt){}

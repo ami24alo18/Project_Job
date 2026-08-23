@@ -1,0 +1,5 @@
+package com.amit.jobagent.application;import com.amit.jobagent.profile.version.PublishedProfileSnapshot;import com.fasterxml.jackson.databind.JsonNode;import java.util.*;import org.springframework.stereotype.Component;
+@Component class ProfileGenerationSource{
+ List<VerifiedFactSnapshot>facts(PublishedProfileSnapshot p){var out=new ArrayList<VerifiedFactSnapshot>();for(JsonNode n:p.snapshot().path("verifiedResumeFacts")){if(!"VERIFIED".equals(n.path("status").asText()))continue;var skills=new LinkedHashSet<String>();n.path("skillTags").forEach(v->skills.add(v.asText()));var domains=new LinkedHashSet<String>();n.path("domainTags").forEach(v->domains.add(v.asText()));out.add(new VerifiedFactSnapshot(UUID.fromString(n.path("id").asText()),n.path("category").asText(),n.path("statement").asText(),nullable(n,"company"),nullable(n,"startDate"),nullable(n,"endDate"),Set.copyOf(skills),Set.copyOf(domains)));}return List.copyOf(out);}
+ private static String nullable(JsonNode n,String key){var v=n.path(key);return v.isMissingNode()||v.isNull()?null:v.asText();}
+}

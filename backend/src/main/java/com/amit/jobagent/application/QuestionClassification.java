@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;public enum QuestionClassification{VERIFIED_AUTOMATIC,SUGGESTED_REQUIRES_REVIEW,USER_INPUT_REQUIRED,SENSITIVE_NEVER_AUTOMATIC}

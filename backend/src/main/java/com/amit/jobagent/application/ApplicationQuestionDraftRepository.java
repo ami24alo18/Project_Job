@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;import org.springframework.data.jpa.repository.JpaRepository;interface ApplicationQuestionDraftRepository extends JpaRepository<ApplicationQuestionDraft,UUID>{List<ApplicationQuestionDraft>findByRevisionIdOrderByCreatedAtAscIdAsc(UUID id);boolean existsByRevisionIdAndHash(UUID revision,String hash);}

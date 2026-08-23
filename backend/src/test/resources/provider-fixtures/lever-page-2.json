@@ -1,0 +1,14 @@
+[
+  {
+    "id": "lever-fictional-003",
+    "text": "Backend Engineer",
+    "categories": {
+      "location": "Example Town",
+      "commitment": "Full-time"
+    },
+    "workplaceType": "on-site",
+    "description": "<div>Develop fictional backend APIs.</div>",
+    "hostedUrl": "https://jobs.lever.example/fictional/003",
+    "applyUrl": "https://jobs.lever.example/fictional/003/apply"
+  }
+]

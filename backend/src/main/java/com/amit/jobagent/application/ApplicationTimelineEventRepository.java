@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;import org.springframework.data.jpa.repository.JpaRepository;interface ApplicationTimelineEventRepository extends JpaRepository<ApplicationTimelineEvent,UUID>{List<ApplicationTimelineEvent>findByTrackerIdOrderByCreatedAtAsc(UUID id);}

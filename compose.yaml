@@ -1,0 +1,159 @@
+name: job-application-agent
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-job_agent}
+      POSTGRES_USER: ${POSTGRES_USER:-job_agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-job_agent_local_change_me}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [job-agent]
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      SERVER_PORT: 8080
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-job_agent}
+      DATABASE_USERNAME: ${POSTGRES_USER:-job_agent}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-job_agent_local_change_me}
+      ALLOWED_FRONTEND_ORIGIN: ${ALLOWED_FRONTEND_ORIGIN:-http://localhost:3000}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-local_n8n_change_me}
+      APP_SECURITY_USERNAME: ${APP_SECURITY_USERNAME:-jobagent}
+      APP_SECURITY_PASSWORD: ${APP_SECURITY_PASSWORD:-local_app_password_change_me}
+      RESUME_MAX_SIZE_BYTES: ${RESUME_MAX_SIZE_BYTES:-5242880}
+      JOB_DESCRIPTION_MAX_CHARACTERS: ${JOB_DESCRIPTION_MAX_CHARACTERS:-100000}
+      JOB_SOURCE_MAX_RESPONSE_BYTES: ${JOB_SOURCE_MAX_RESPONSE_BYTES:-5242880}
+      JOB_SOURCE_CONNECT_TIMEOUT_MILLIS: ${JOB_SOURCE_CONNECT_TIMEOUT_MILLIS:-3000}
+      JOB_SOURCE_REQUEST_TIMEOUT_MILLIS: ${JOB_SOURCE_REQUEST_TIMEOUT_MILLIS:-10000}
+      JOB_SOURCE_MAX_RETRIES: ${JOB_SOURCE_MAX_RETRIES:-2}
+      JOB_SOURCE_RETRY_BASE_DELAY_MILLIS: ${JOB_SOURCE_RETRY_BASE_DELAY_MILLIS:-250}
+      JOB_SOURCE_EXECUTOR_CORE_SIZE: ${JOB_SOURCE_EXECUTOR_CORE_SIZE:-2}
+      JOB_SOURCE_EXECUTOR_MAX_SIZE: ${JOB_SOURCE_EXECUTOR_MAX_SIZE:-4}
+      JOB_SOURCE_EXECUTOR_QUEUE_CAPACITY: ${JOB_SOURCE_EXECUTOR_QUEUE_CAPACITY:-50}
+      JOB_SOURCE_STALE_RUN_MINUTES: ${JOB_SOURCE_STALE_RUN_MINUTES:-30}
+      AI_EVALUATION_ENABLED: ${AI_EVALUATION_ENABLED:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6-terra}
+      OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-low}
+      OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-30}
+      AI_MAX_CONCURRENT_REQUESTS: ${AI_MAX_CONCURRENT_REQUESTS:-2}
+      AI_MAX_DAILY_REQUESTS: ${AI_MAX_DAILY_REQUESTS:-100}
+      AI_MAX_DAILY_INPUT_TOKENS: ${AI_MAX_DAILY_INPUT_TOKENS:-500000}
+      AI_MAX_INPUT_CHARACTERS: ${AI_MAX_INPUT_CHARACTERS:-50000}
+      AI_MAX_JOBS_PER_BATCH: ${AI_MAX_JOBS_PER_BATCH:-25}
+      APPLICATION_PACKAGE_AUTOMATION_ENABLED: ${APPLICATION_PACKAGE_AUTOMATION_ENABLED:-false}
+      OPENAI_CONTENT_GENERATION_ENABLED: ${OPENAI_CONTENT_GENERATION_ENABLED:-false}
+      OPENAI_CONTENT_GENERATION_MODEL: ${OPENAI_CONTENT_GENERATION_MODEL:-gpt-5.6-terra}
+      OPENAI_CONTENT_GENERATION_REASONING_EFFORT: ${OPENAI_CONTENT_GENERATION_REASONING_EFFORT:-low}
+      OPENAI_CONTENT_GENERATION_TIMEOUT: ${OPENAI_CONTENT_GENERATION_TIMEOUT:-30s}
+      OPENAI_CONTENT_GENERATION_MAX_RETRIES: ${OPENAI_CONTENT_GENERATION_MAX_RETRIES:-1}
+      CONTENT_GENERATION_DAILY_LIMIT: ${CONTENT_GENERATION_DAILY_LIMIT:-20}
+      CONTENT_GENERATION_MAX_INPUT_TOKENS: ${CONTENT_GENERATION_MAX_INPUT_TOKENS:-24000}
+      CONTENT_GENERATION_MAX_OUTPUT_TOKENS: ${CONTENT_GENERATION_MAX_OUTPUT_TOKENS:-8000}
+      CONTENT_GENERATION_MAX_INPUT_CHARACTERS: ${CONTENT_GENERATION_MAX_INPUT_CHARACTERS:-60000}
+      CONTENT_GENERATION_PROMPT_VERSION: ${CONTENT_GENERATION_PROMPT_VERSION:-v1}
+      CONTENT_GENERATION_SCHEMA_VERSION: ${CONTENT_GENERATION_SCHEMA_VERSION:-v1}
+      RESUME_TEMPLATE_VERSION: ${RESUME_TEMPLATE_VERSION:-ats-single-column-v1}
+      MINIO_URL: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio_local_change_me}
+      MINIO_BUCKET: ${MINIO_BUCKET:-job-agent-documents}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [job-agent]
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [job-agent]
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_local_change_me}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [job-agent]
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.1.4
+    restart: unless-stopped
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-job_agent}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-job_agent_local_change_me}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-local_n8n_encryption_key_change_me}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-local_n8n_change_me}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Asia/Calcutta}
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./automation/n8n-workflows:/workflows:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:5678/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [job-agent]
+
+volumes:
+  postgres_data:
+  minio_data:
+  n8n_data:
+
+networks:
+  job-agent:
+    driver: bridge

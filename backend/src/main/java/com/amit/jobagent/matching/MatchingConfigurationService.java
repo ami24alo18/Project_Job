@@ -1,0 +1,11 @@
+package com.amit.jobagent.matching;
+import com.amit.jobagent.audit.*; import com.amit.jobagent.common.error.*; import com.amit.jobagent.profile.ActiveProfileProvider;
+import org.springframework.stereotype.Service; import org.springframework.transaction.annotation.Transactional;
+@Service public class MatchingConfigurationService{
+ private final MatchingConfigurationRepository repo; private final ActiveProfileProvider profiles; private final AuditService audit;
+ public MatchingConfigurationService(MatchingConfigurationRepository r,ActiveProfileProvider p,AuditService a){repo=r;profiles=p;audit=a;}
+ @Transactional public MatchingConfigurationResponse get(){return map(repo.findByProfileId(profiles.requireProfileId()).orElseGet(()->repo.save(new MatchingConfiguration(profiles.requireProfileId()))));}
+ @Transactional public MatchingConfigurationResponse put(MatchingConfigurationRequest r){validate(r);var c=repo.findByProfileId(profiles.requireProfileId()).orElseGet(()->new MatchingConfiguration(profiles.requireProfileId()));if(r.recordVersion()!=null&&c.getRecordVersion()!=r.recordVersion())throw new ConflictException("Matching configuration was changed by another request");c.apply(r);var saved=repo.saveAndFlush(c);audit.record(AuditEventType.MATCHING_CONFIGURATION_UPDATED,"MatchingConfiguration",saved.getId(),"{\"rulesetVersion\":\""+saved.rulesetVersion+"\"}");return map(saved);}
+ private static void validate(MatchingConfigurationRequest r){if(r.skillsWeight()+r.experienceWeight()+r.roleWeight()+r.locationWeight()+r.domainWeight()+r.compensationWeight()!=100)throw new DomainValidationException("Matching weights must total 100");if(!(r.strongApplyThreshold()>r.applyThreshold()&&r.applyThreshold()>r.manualReviewThreshold()))throw new DomainValidationException("Recommendation thresholds must be strictly descending");}
+ private static MatchingConfigurationResponse map(MatchingConfiguration c){return new MatchingConfigurationResponse(c.getId(),c.profileId,c.skillsWeight,c.experienceWeight,c.roleWeight,c.locationWeight,c.domainWeight,c.compensationWeight,c.strongApplyThreshold,c.applyThreshold,c.manualReviewThreshold,c.maximumAllowedExperienceGap,c.maximumJobsPerBatch,c.maximumDailyAiRequests,c.maximumDailyInputTokens,c.rulesetVersion,c.getRecordVersion(),c.getCreatedAt(),c.getUpdatedAt());}
+}

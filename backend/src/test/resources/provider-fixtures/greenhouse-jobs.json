@@ -1,0 +1,28 @@
+{
+  "jobs": [
+    {
+      "id": 700001,
+      "internal_job_id": 800001,
+      "title": "Fictional Backend Engineer",
+      "company_name": "Example Systems",
+      "location": { "name": "Example City" },
+      "first_published": "2026-08-20T08:00:00Z",
+      "updated_at": "2026-08-22T09:30:00+00:00",
+      "application_deadline": "2026-09-30T23:59:59Z",
+      "absolute_url": "https://boards.greenhouse.example/example/jobs/700001",
+      "content": "&lt;p&gt;Build safe fictional services.&lt;/p&gt;",
+      "departments": [{ "id": 42, "name": "Engineering" }],
+      "offices": [{ "id": 43, "name": "Example Office", "location": "Example City" }]
+    },
+    {
+      "id": 700002,
+      "title": "Fictional Operations Engineer",
+      "location": { "name": "Remote" },
+      "updated_at": "2026-08-21T10:00:00Z",
+      "absolute_url": "https://boards.greenhouse.example/example/jobs/700002",
+      "content": "&lt;p&gt;Operate fictional systems.&lt;/p&gt;",
+      "departments": []
+    }
+  ],
+  "meta": { "total": 2 }
+}

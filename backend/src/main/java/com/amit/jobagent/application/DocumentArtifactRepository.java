@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;import org.springframework.data.jpa.repository.JpaRepository;interface DocumentArtifactRepository extends JpaRepository<DocumentArtifact,UUID>{List<DocumentArtifact>findByRevisionId(UUID id);Optional<DocumentArtifact>findByRevisionIdAndType(UUID revision,ArtifactType type);}

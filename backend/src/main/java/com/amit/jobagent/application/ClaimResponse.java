@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;public record ClaimResponse(UUID id,UUID contentId,String claimText,ClaimType claimType,String contentPath,ClaimValidationStatus validationStatus,List<String>validationCodes,List<UUID>candidateFactIds,List<UUID>jobRequirementIds,String jobFieldReference){}

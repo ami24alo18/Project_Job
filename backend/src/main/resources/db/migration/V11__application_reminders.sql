@@ -1,0 +1,2 @@
+CREATE TABLE job_agent.application_reminder(id UUID PRIMARY KEY,application_tracker_id UUID NOT NULL REFERENCES job_agent.application_tracker(id) ON DELETE RESTRICT,reminder_type VARCHAR(40) NOT NULL,scheduled_at TIMESTAMPTZ NOT NULL,timezone VARCHAR(80) NOT NULL,status VARCHAR(20) NOT NULL, deduplication_key VARCHAR(160) NOT NULL UNIQUE,created_at TIMESTAMPTZ NOT NULL,updated_at TIMESTAMPTZ NOT NULL);
+CREATE INDEX idx_application_reminder_due ON job_agent.application_reminder(status,scheduled_at);

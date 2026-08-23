@@ -1,0 +1,43 @@
+[
+  {
+    "id": "lever-fictional-001",
+    "text": "Platform Engineer",
+    "categories": {
+      "location": "Example City, EX",
+      "commitment": "Full-time",
+      "team": "Platform",
+      "department": "Engineering"
+    },
+    "country": "EX",
+    "workplaceType": "hybrid",
+    "description": "<p>Build fictional platform services.</p>",
+    "descriptionPlain": "Build fictional platform services.",
+    "lists": [
+      {"text": "What you will do", "content": "<ul><li>Build APIs</li><li>Review changes</li></ul>"}
+    ],
+    "additional": "<p>Use documented public posting fields only.</p>",
+    "additionalPlain": "Use documented public posting fields only.",
+    "hostedUrl": "https://jobs.lever.example/fictional/001",
+    "applyUrl": "https://jobs.lever.example/fictional/001/apply?utm_source=test",
+    "salaryRange": {
+      "currency": "USD",
+      "interval": "year",
+      "min": 100000,
+      "max": 140000
+    }
+  },
+  {
+    "id": "lever-fictional-002",
+    "text": "Site Reliability Engineer",
+    "categories": {
+      "location": "Remote",
+      "commitment": "Contract",
+      "team": "Reliability",
+      "department": "Engineering"
+    },
+    "workplaceType": "remote",
+    "descriptionPlain": "Operate a fictional service.",
+    "hostedUrl": "https://jobs.lever.example/fictional/002",
+    "applyUrl": "https://jobs.lever.example/fictional/002/apply"
+  }
+]

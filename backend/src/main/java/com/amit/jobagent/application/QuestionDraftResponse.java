@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.UUID;public record QuestionDraftResponse(UUID id,String question,QuestionClassification classification,String draftAnswer,QuestionAnswerStatus answerStatus,Integer confidence){}

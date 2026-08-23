@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;import org.springframework.data.jpa.repository.JpaRepository;interface ApplicationTrackerRepository extends JpaRepository<ApplicationTracker,UUID>{Optional<ApplicationTracker>findByHandoffId(UUID id);List<ApplicationTracker>findByUserIdOrderByLastActivityAtDesc(String id);}

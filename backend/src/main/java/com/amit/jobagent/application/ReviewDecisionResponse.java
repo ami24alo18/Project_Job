@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.time.Instant;import java.util.UUID;public record ReviewDecisionResponse(UUID id,ReviewDecisionType decision,String actorId,String actorRole,String comment,ReviewChecklist checklist,Instant createdAt,Instant invalidatedAt,String invalidationReason){}

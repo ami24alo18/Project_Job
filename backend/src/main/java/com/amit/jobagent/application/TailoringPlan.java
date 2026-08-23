@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;public record TailoringPlan(List<UUID>selectedFactIds,List<UUID>selectedRequirementIds,List<String>orderedSkills,List<String>unsupportedRequirements,List<String>omissions,String tone){}

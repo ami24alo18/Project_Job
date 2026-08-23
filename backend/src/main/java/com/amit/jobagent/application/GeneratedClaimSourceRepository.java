@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;import org.springframework.data.jpa.repository.JpaRepository;interface GeneratedClaimSourceRepository extends JpaRepository<GeneratedClaimSource,UUID>{List<GeneratedClaimSource>findByClaimIdIn(Collection<UUID>ids);}

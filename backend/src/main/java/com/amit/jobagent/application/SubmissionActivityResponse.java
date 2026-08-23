@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.time.Instant;import java.util.UUID;public record SubmissionActivityResponse(UUID id,SubmissionAction action,String actor,String externalReference,String note,Instant reportedSubmissionAt,Instant createdAt){}

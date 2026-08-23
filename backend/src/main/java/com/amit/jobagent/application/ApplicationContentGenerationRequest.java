@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;public record ApplicationContentGenerationRequest(UUID profileVersionId,String profileChecksum,String jobChecksum,String evaluationChecksum,String jobTitle,String company,String jobDescription,List<VerifiedFactSnapshot>facts,List<JobRequirementSnapshot>jobRequirements,List<String>questions){}

@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;import org.springframework.data.jpa.repository.JpaRepository;interface ApplicationReviewDecisionRepository extends JpaRepository<ApplicationReviewDecision,UUID>{List<ApplicationReviewDecision>findByRevisionIdOrderByCreatedAtDesc(UUID revisionId);}

@@ -1,0 +1,1 @@
+import{Alert,Stack,Typography}from'@mui/material';export function EvaluationRunsPage(){return <Stack spacing={2}><Typography variant="h4">Evaluation runs</Typography><Alert severity="info">Bounded batch-run history will appear here after an evaluate-ready run is submitted.</Alert></Stack>}

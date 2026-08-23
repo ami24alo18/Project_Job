@@ -1,0 +1,7 @@
+package com.amit.jobagent.matching;
+import java.math.*; import java.util.*;
+public final class WeightedScoringService{
+ public record Scores(Integer skills,Integer experience,Integer role,Integer location,Integer domain,Integer compensation){}
+ public record Result(int score,Recommendation recommendation,List<String>unassessedDimensions){}
+ public Result calculate(Scores s,MatchingConfigurationResponse c,boolean hardFail,boolean insufficientData,Integer confidence){if(hardFail)return new Result(0,Recommendation.SKIP,List.of());var values=List.of(new D("SKILLS",s.skills(),c.skillsWeight()),new D("EXPERIENCE",s.experience(),c.experienceWeight()),new D("ROLE",s.role(),c.roleWeight()),new D("LOCATION",s.location(),c.locationWeight()),new D("DOMAIN",s.domain(),c.domainWeight()),new D("COMPENSATION",s.compensation(),c.compensationWeight()));int weighted=0,weights=0;var missing=new ArrayList<String>();for(var d:values){if(d.score==null)missing.add(d.name);else{weighted+=d.score*d.weight;weights+=d.weight;}}int score=weights==0?0:BigDecimal.valueOf(weighted).divide(BigDecimal.valueOf(weights),0,RoundingMode.HALF_UP).intValue();Recommendation rec=score>=c.strongApplyThreshold()?Recommendation.STRONG_APPLY:score>=c.applyThreshold()?Recommendation.APPLY:score>=c.manualReviewThreshold()?Recommendation.MANUAL_REVIEW:Recommendation.SKIP;if(insufficientData||confidence!=null&&confidence<50)rec=Recommendation.MANUAL_REVIEW;return new Result(score,rec,List.copyOf(missing));}private record D(String name,Integer score,int weight){}
+}

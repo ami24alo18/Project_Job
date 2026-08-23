@@ -1,0 +1,1 @@
+package com.amit.jobagent.matching;import jakarta.validation.constraints.*;public record FeedbackRequest(@NotNull HumanLabel humanLabel,boolean wasRecommendationCorrect,@Size(max=1000)String notes,Long recordVersion){}

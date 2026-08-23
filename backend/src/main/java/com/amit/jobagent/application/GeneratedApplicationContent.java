@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;public record GeneratedApplicationContent(List<GeneratedContentItem>contents,List<GeneratedClaimAtom>claims,List<String>warnings,List<String>unsupportedRequirements){}

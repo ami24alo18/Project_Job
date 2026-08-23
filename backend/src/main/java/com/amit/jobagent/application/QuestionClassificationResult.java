@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;public record QuestionClassificationResult(QuestionClassification classification,String deterministicAnswer,QuestionAnswerStatus answerStatus,Integer confidence){}

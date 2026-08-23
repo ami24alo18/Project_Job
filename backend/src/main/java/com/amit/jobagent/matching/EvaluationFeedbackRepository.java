@@ -1,0 +1,1 @@
+package com.amit.jobagent.matching;import java.util.*;import org.springframework.data.jpa.repository.JpaRepository;interface EvaluationFeedbackRepository extends JpaRepository<EvaluationFeedback,UUID>{Optional<EvaluationFeedback>findByEvaluationId(UUID id);}

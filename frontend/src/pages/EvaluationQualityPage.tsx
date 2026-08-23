@@ -1,0 +1,1 @@
+import{Alert,Stack,Typography}from'@mui/material';export function EvaluationQualityPage(){return <Stack spacing={2}><Typography variant="h4">Evaluation quality</Typography><Alert severity="warning">Human-labelled samples are small; displayed quality metrics must not be treated as statistically significant.</Alert></Stack>}

@@ -1,0 +1,1 @@
+import{Alert,Stack,Typography}from'@mui/material';export function EvaluationsPage(){return <Stack spacing={2}><Typography variant="h4">Evaluations</Typography><Alert severity="info">Evaluate a normalized job from its detail page. Historical evaluations are retained when inputs become stale.</Alert></Stack>}

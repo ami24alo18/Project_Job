@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import com.amit.jobagent.matching.Recommendation;import java.time.Instant;import java.util.UUID;public record ReviewQueueItem(UUID packageId,UUID revisionId,int revisionNumber,String jobTitle,String company,Recommendation recommendation,ReviewStatus reviewStatus,boolean stale,String staleReason,Instant createdAt){}

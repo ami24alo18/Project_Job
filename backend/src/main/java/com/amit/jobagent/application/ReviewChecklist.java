@@ -1,0 +1,3 @@
+package com.amit.jobagent.application;
+import jakarta.validation.constraints.NotNull;
+public record ReviewChecklist(@NotNull Boolean resumeReviewed,@NotNull Boolean generatedContentReviewed,@NotNull Boolean factWarningsAcknowledged,@NotNull Boolean applicationQuestionsReviewed,@NotNull Boolean artifactsReviewed,@NotNull Boolean accuracyConfirmed){boolean complete(){return Boolean.TRUE.equals(resumeReviewed)&&Boolean.TRUE.equals(generatedContentReviewed)&&Boolean.TRUE.equals(factWarningsAcknowledged)&&Boolean.TRUE.equals(applicationQuestionsReviewed)&&Boolean.TRUE.equals(artifactsReviewed)&&Boolean.TRUE.equals(accuracyConfirmed);}}

@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.time.Instant;import java.util.UUID;public record ArtifactResponse(UUID id,ArtifactType type,String fileName,String contentType,long sizeBytes,String sha256Checksum,String templateVersion,Instant createdAt){}

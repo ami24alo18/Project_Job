@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;public record VerifiedFactSnapshot(UUID id,String category,String statement,String company,String startDate,String endDate,Set<String>skillTags,Set<String>domainTags){}

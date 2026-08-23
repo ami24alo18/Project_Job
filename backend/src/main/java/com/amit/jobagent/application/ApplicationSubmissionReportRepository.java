@@ -1,0 +1,1 @@
+package com.amit.jobagent.application;import java.util.*;import org.springframework.data.jpa.repository.JpaRepository;interface ApplicationSubmissionReportRepository extends JpaRepository<ApplicationSubmissionReport,UUID>{List<ApplicationSubmissionReport>findByHandoffIdOrderByCreatedAtAsc(UUID id);Optional<ApplicationSubmissionReport>findByIdempotencyHash(String hash);}
