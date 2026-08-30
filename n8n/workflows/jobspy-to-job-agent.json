@@ -1,0 +1,112 @@
+{
+  "name": "JobSpy to Job Application Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Setup required\n1. In Job Agent, create an enabled **JobSpy** external source and copy its one-time token.\n2. Create an n8n HTTP Header Auth credential for the worker: `X-JobSpy-Worker-Token`.\n3. Create another Header Auth credential for Job Agent: `X-Job-Agent-Webhook-Token`.\n4. Configure source UUID, query, location, country, and only deployment-approved sites below.\n5. Run manually before activating the six-hour schedule.\n\nNo proxy, cookie, login, CAPTCHA, or blocking-bypass input is supported.",
+        "height": 400,
+        "width": 480
+      },
+      "id": "4f4aa9b6-2bed-49a8-b490-199931209bd4",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-720, -320]
+    },
+    {
+      "parameters": {
+        "rule": {"interval": [{"field": "hours", "hoursInterval": 6}]}
+      },
+      "id": "6859a59e-15de-4aa7-8d18-49f71c3613bc",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [-624, 128]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "a1", "name": "jobSpyBaseUrl", "value": "http://jobspy-worker:8090", "type": "string"},
+            {"id": "a2", "name": "jobAgentBaseUrl", "value": "http://backend:8080", "type": "string"},
+            {"id": "a3", "name": "sourceId", "value": "REPLACE_WITH_JOBSPY_SOURCE_UUID", "type": "string"},
+            {"id": "a4", "name": "searchRuleId", "value": "", "type": "string"},
+            {"id": "a5", "name": "sites", "value": "REPLACE_WITH_APPROVED_SITE", "type": "string"},
+            {"id": "a6", "name": "query", "value": "Java Spring Boot Developer", "type": "string"},
+            {"id": "a7", "name": "location", "value": "Bengaluru, India", "type": "string"},
+            {"id": "a8", "name": "country", "value": "india", "type": "string"},
+            {"id": "a9", "name": "resultsWanted", "value": 50, "type": "number"},
+            {"id": "a10", "name": "hoursOld", "value": 72, "type": "number"},
+            {"id": "a11", "name": "remoteOnly", "value": false, "type": "boolean"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "f2d556a2-c93a-42ce-8089-048ba9d99b0a",
+      "name": "Configure JobSpy Source",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-400, 128]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.jobSpyBaseUrl + '/v1/scrape' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ requestId: 'n8n-' + $execution.id + '-' + $json.sourceId, sites: String($json.sites).split(',').map(s => s.trim()).filter(Boolean), query: $json.query, location: $json.location || null, country: $json.country, resultsWanted: Number($json.resultsWanted), hoursOld: Number($json.hoursOld), remoteOnly: Boolean($json.remoteOnly) }) }}",
+        "options": {"timeout": 150000}
+      },
+      "id": "22289367-e769-4829-b3ef-57b43e158701",
+      "name": "Fetch Jobs from JobSpy Worker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [-128, 128]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst config = $('Configure JobSpy Source').first().json;\nif (!response || !Array.isArray(response.jobs)) throw new Error('JobSpy worker returned an invalid response');\nif (response.requestId !== `n8n-${$execution.id}-${config.sourceId}`) throw new Error('JobSpy worker response identity mismatch');\nif (response.jobs.length === 0) throw new Error('JobSpy returned no valid jobs; no empty event was sent');\nreturn [{ json: {\n  eventId: response.requestId,\n  ingestionProvider: 'JOBSPY',\n  searchRuleId: config.searchRuleId || null,\n  query: response.query || config.query,\n  fetchedAt: response.completedAt || new Date().toISOString(),\n  jobs: response.jobs.slice(0, 100),\n} }];"
+      },
+      "id": "8958578b-35fd-4263-ade4-81e9a23730ad",
+      "name": "Validate and Map JobSpy Batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [128, 128]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configure JobSpy Source').first().json.jobAgentBaseUrl + '/api/v1/job-sources/' + $('Configure JobSpy Source').first().json.sourceId + '/external-events' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Idempotency-Key", "value": "={{ $json.eventId }}"}]},
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {"timeout": 60000}
+      },
+      "id": "1d076c75-70cb-4073-bf1c-e118c91331b4",
+      "name": "Send Batch to Job Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [400, 128]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {"main": [[{"node": "Configure JobSpy Source", "type": "main", "index": 0}]]},
+    "Configure JobSpy Source": {"main": [[{"node": "Fetch Jobs from JobSpy Worker", "type": "main", "index": 0}]]},
+    "Fetch Jobs from JobSpy Worker": {"main": [[{"node": "Validate and Map JobSpy Batch", "type": "main", "index": 0}]]},
+    "Validate and Map JobSpy Batch": {"main": [[{"node": "Send Batch to Job Agent", "type": "main", "index": 0}]]}
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1", "saveDataSuccessExecution": "none", "saveDataErrorExecution": "none", "saveManualExecutions": false},
+  "versionId": "8dc692eb-401e-4e84-8adb-c9cadf073aaf",
+  "meta": {"templateCredsSetupCompleted": false},
+  "tags": []
+}

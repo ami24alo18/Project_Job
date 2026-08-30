@@ -1,7 +1,13 @@
-export type JobSourceType = 'LEVER' | 'GREENHOUSE' | 'EMAIL_WEBHOOK' | 'MANUAL'
+export type JobSourceType = 'LEVER' | 'GREENHOUSE' | 'EMAIL_WEBHOOK' | 'EXTERNAL_API' | 'CAREER_SITE' | 'MANUAL'
+export type ConfiguredFeedSourceType = 'LEVER' | 'GREENHOUSE' | 'EMAIL_WEBHOOK'
 export type SourceRegion = 'DEFAULT' | 'GLOBAL' | 'EU'
-export type JobSourceTriggerType = 'MANUAL' | 'N8N' | 'RETRY'
+export type JobSourceTriggerType = 'MANUAL' | 'N8N' | 'RETRY' | 'WEBHOOK' | 'EXTRACTION_WORKER'
+export type JobSourceRunCoverage = 'COMPLETE_INVENTORY' | 'FILTERED_QUERY' | 'PUSH_BATCH'
 export type JobSourceRunStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'PARTIAL_SUCCESS' | 'FAILED'
+export type JobSourceCategory = 'PULL_FEED' | 'PUSH_WEBHOOK' | 'EMAIL_WEBHOOK'
+export type JobSourceConnectorType = 'LEVER' | 'GREENHOUSE' | 'EMAIL' | 'JSEARCH' | 'JOBSPY' | 'CUSTOM_WEBHOOK' | 'ORACLE_CX' | 'WORKDAY' | 'SMARTRECRUITERS' | 'GENERIC_JSON_LD' | 'CUSTOM_RECIPE'
+export type JobSourceSupportStatus = 'SUPPORTED' | 'NEEDS_AUTHORIZATION' | 'NEEDS_ADAPTER' | 'NEEDS_EXTRACTION_RECIPE' | 'UNSUPPORTED' | 'VALIDATION_FAILED'
+export type DatePostedWindow = 'ANY' | 'TODAY' | 'THREE_DAYS' | 'WEEK' | 'MONTH'
 export type WorkplaceType = 'REMOTE' | 'HYBRID' | 'ONSITE' | 'UNSPECIFIED'
 export type EmploymentType = 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'TEMPORARY' | 'INTERNSHIP' | 'OTHER' | 'UNSPECIFIED'
 export type SalaryInterval = 'HOUR' | 'DAY' | 'WEEK' | 'MONTH' | 'YEAR' | 'OTHER' | 'UNSPECIFIED'
@@ -19,8 +25,19 @@ export interface JobSourceConfiguration {
   id: string
   displayName: string
   sourceType: Exclude<JobSourceType, 'MANUAL'>
+  sourceCategory?: JobSourceCategory
+  connectorType?: JobSourceConnectorType
   providerIdentifier: string
   region: SourceRegion
+  careerSiteUrl?: string
+  canonicalHost?: string
+  supportStatus?: JobSourceSupportStatus
+  supportMessage?: string
+  webhookConfigured?: boolean
+  detectionVersion?: string
+  extractionRecipeVersion?: string
+  lastConnectionTestAt?: string
+  lastConnectionTestStatus?: 'SUCCEEDED' | 'FAILED'
   enabled: boolean
   pageSize: number
   maximumPagesPerRun: number
@@ -36,7 +53,7 @@ export interface JobSourceConfiguration {
 
 export interface JobSourceInput {
   displayName: string
-  sourceType: Exclude<JobSourceType, 'MANUAL'>
+  sourceType: ConfiguredFeedSourceType
   providerIdentifier: string
   region: SourceRegion
   enabled: boolean
@@ -46,10 +63,87 @@ export interface JobSourceInput {
   recordVersion?: number
 }
 
+export interface ExternalJobSourceInput {
+  displayName: string
+  providerIdentifier: string
+  connectorType: 'JSEARCH' | 'JOBSPY' | 'CUSTOM_WEBHOOK'
+  enabled: boolean
+}
+
+export interface JobSpyPolicy {
+  configured: boolean
+  allowedSites: string[]
+}
+
+export interface ExternalJobSourceCreated {
+  source: JobSourceConfiguration
+  webhookUrl: string
+  webhookToken: string
+}
+
+export interface CareerSiteDiscoveryInput {
+  companyName: string
+  careerSiteUrl: string
+}
+
+export interface CareerSiteDiscovery {
+  canonicalUrl: string
+  canonicalHost: string
+  connectorType?: JobSourceConnectorType
+  providerIdentifier: string
+  supportStatus: JobSourceSupportStatus
+  supportMessage: string
+  detectionVersion: string
+}
+
+export interface CareerSiteJobSourceInput extends CareerSiteDiscoveryInput {
+  enabled: boolean
+  pageSize: number
+  maximumPagesPerRun: number
+  missingRunThreshold: number
+}
+
+export interface JobSourceConnectionTest {
+  source: JobSourceConfiguration
+  status: 'SUCCEEDED' | 'FAILED'
+  discoveredCount: number
+  message: string
+}
+
+export interface WebhookTokenRotation {
+  sourceId: string
+  webhookUrl: string
+  webhookToken: string
+}
+
+export interface JobSourceSearchRuleInput {
+  name: string
+  query: string
+  locations: string[]
+  remoteAllowed: boolean
+  hybridAllowed: boolean
+  onsiteAllowed: boolean
+  datePostedWindow: DatePostedWindow
+  maximumResults: number
+  enabled: boolean
+  recordVersion?: number
+}
+
+export interface JobSourceSearchRule extends JobSourceSearchRuleInput {
+  id: string
+  sourceId: string
+  recordVersion: number
+  createdAt: string
+  updatedAt: string
+}
+
 export interface JobSourceRun {
   id: string
   sourceId: string
   triggerType: JobSourceTriggerType
+  coverage?: JobSourceRunCoverage
+  searchRuleId?: string
+  externalEventId?: string
   status: JobSourceRunStatus
   checkpoint?: unknown
   startedAt?: string
@@ -105,6 +199,11 @@ export interface JobPosting {
   status: JobPostingStatus
   manuallyEdited: boolean
   sourceUpdateAvailable?: boolean
+  ingestionProvider?: 'LEVER' | 'GREENHOUSE' | 'EMAIL' | 'MANUAL' | 'JSEARCH' | 'JOBSPY' | 'CUSTOM_WEBHOOK' | 'ORACLE_CX' | 'WORKDAY' | 'SMARTRECRUITERS' | 'GENERIC_JSON_LD' | 'CUSTOM_RECIPE'
+  originPublisher?: string
+  discoveryQuery?: string
+  externalEventId?: string
+  extractionRecipeVersion?: string
   recordVersion: number
   createdAt: string
   updatedAt: string

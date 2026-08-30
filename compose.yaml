@@ -44,6 +44,7 @@ services:
       JOB_SOURCE_EXECUTOR_MAX_SIZE: ${JOB_SOURCE_EXECUTOR_MAX_SIZE:-4}
       JOB_SOURCE_EXECUTOR_QUEUE_CAPACITY: ${JOB_SOURCE_EXECUTOR_QUEUE_CAPACITY:-50}
       JOB_SOURCE_STALE_RUN_MINUTES: ${JOB_SOURCE_STALE_RUN_MINUTES:-30}
+      JOBSPY_ALLOWED_SITES: ${JOBSPY_ALLOWED_SITES:-}
       AI_EVALUATION_ENABLED: ${AI_EVALUATION_ENABLED:-false}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6-terra}
@@ -136,10 +137,13 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
       - ./automation/n8n-workflows:/workflows:ro
+      - ./n8n/workflows:/job-source-workflows:ro
     depends_on:
       postgres:
         condition: service_healthy
       backend:
+        condition: service_healthy
+      jobspy-worker:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:5678/healthz"]
@@ -147,6 +151,36 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+    networks: [job-agent]
+
+  jobspy-worker:
+    build: ./jobspy-worker
+    restart: unless-stopped
+    environment:
+      JOBSPY_WORKER_TOKEN: ${JOBSPY_WORKER_TOKEN:-local_jobspy_worker_token_change_me_32}
+      JOBSPY_ALLOWED_SITES: ${JOBSPY_ALLOWED_SITES:-}
+      JOBSPY_MAX_BODY_BYTES: ${JOBSPY_MAX_BODY_BYTES:-32768}
+      JOBSPY_MAX_SITES_PER_REQUEST: ${JOBSPY_MAX_SITES_PER_REQUEST:-2}
+      JOBSPY_MAX_RESULTS_PER_SITE: ${JOBSPY_MAX_RESULTS_PER_SITE:-100}
+      JOBSPY_REQUEST_TIMEOUT_SECONDS: ${JOBSPY_REQUEST_TIMEOUT_SECONDS:-120}
+      JOBSPY_MAX_CONCURRENT_REQUESTS: ${JOBSPY_MAX_CONCURRENT_REQUESTS:-1}
+    expose:
+      - "8090"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 768m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     networks: [job-agent]
 
 volumes:

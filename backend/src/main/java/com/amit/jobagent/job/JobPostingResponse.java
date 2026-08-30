@@ -12,4 +12,6 @@ public record JobPostingResponse(
         BigDecimal salaryMaximum, String salaryCurrency, SalaryInterval salaryInterval, Instant publishedAt,
         Instant sourceUpdatedAt, Instant expiresAt, Instant firstSeenAt, Instant lastSeenAt,
         int missingSuccessfulRunCount, String fingerprint, String contentHash, JobPostingStatus status,
-        boolean manuallyEdited, boolean sourceUpdateAvailable, long recordVersion, Instant createdAt, Instant updatedAt) {}
+        boolean manuallyEdited, boolean sourceUpdateAvailable, JobIngestionProvider ingestionProvider,
+        String originPublisher, String discoveryQuery, UUID externalEventId, String extractionRecipeVersion,
+        long recordVersion, Instant createdAt, Instant updatedAt) {}

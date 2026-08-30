@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { jobSourcesApi } from '../api/jobSourcesApi'
 import { jobsApi } from '../api/jobsApi'
+import { evaluationsApi } from '../api/evaluationsApi'
 import { matchingApi, type MatchingConfiguration } from '../api/matchingApi'
 import { jobFormToInput, jobToForm } from '../utils/jobForms'
 import { regionsFor } from '../utils/jobSourceForms'
@@ -14,6 +15,7 @@ import { JobsPage } from '../pages/JobsPage'
 import { NewJobPage } from '../pages/NewJobPage'
 import { MatchingSettingsPage } from '../pages/MatchingSettingsPage'
 import type { JobPosting, JobSourceConfiguration, JobSourceRun, PagedResponse } from '../types/jobs'
+import type { JobEvaluation } from '../types/evaluations'
 
 const source: JobSourceConfiguration = { id: 'source-1', displayName: 'Fictional Lever Board', sourceType: 'LEVER', providerIdentifier: 'fictional-company', region: 'GLOBAL', enabled: true, pageSize: 50, maximumPagesPerRun: 10, missingRunThreshold: 2, consecutiveFailureCount: 0, recordVersion: 1, createdAt: '2026-08-01T00:00:00Z', updatedAt: '2026-08-01T00:00:00Z' }
 const run: JobSourceRun = { id: 'run-1', sourceId: source.id, triggerType: 'MANUAL', status: 'SUCCEEDED', startedAt: '2026-08-22T10:00:00Z', completedAt: '2026-08-22T10:00:02Z', discoveredCount: 4, createdCount: 2, updatedCount: 1, unchangedCount: 0, duplicateCount: 1, failedCount: 0, removedCount: 0, createdAt: '2026-08-22T10:00:00Z' }
@@ -30,7 +32,7 @@ async function choose(label: string, option: string) {
   fireEvent.click(await screen.findByText(option))
 }
 
-beforeEach(() => vi.restoreAllMocks())
+beforeEach(() => { vi.restoreAllMocks(); vi.spyOn(evaluationsApi, 'list').mockResolvedValue([]) })
 afterEach(() => vi.useRealTimers())
 
 describe('Phase 3 source pages', () => {
@@ -56,7 +58,7 @@ describe('Phase 3 source pages', () => {
     router(<JobSourcesPage />)
     await screen.findByText('No job sources configured.')
     await choose('Source type', 'Greenhouse')
-    fireEvent.change(screen.getByLabelText(/Display name/i), { target: { value: 'Fictional Greenhouse Board' } })
+    fireEvent.change(screen.getByLabelText(/^Display name/i), { target: { value: 'Fictional Greenhouse Board' } })
     fireEvent.change(screen.getByLabelText(/Greenhouse board token/i), { target: { value: 'fictional-board' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add source' }))
     await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ sourceType: 'GREENHOUSE', region: 'DEFAULT', providerIdentifier: 'fictional-board' })))
@@ -228,6 +230,19 @@ describe('Phase 3 job pages', () => {
     router(<Routes><Route path="/jobs/:jobId" element={<JobDetailPage />} /></Routes>, `/jobs/${job.id}`)
     expect(await screen.findByRole('heading', { name: job.title })).toBeInTheDocument()
     expect(screen.getByText('Could not load duplicate relationships')).toBeInTheDocument()
+  })
+
+  it('evaluates a job from its detail page and displays the result', async () => {
+    const evaluation: JobEvaluation = { id: 'evaluation-1', jobId: job.id, profileVersionId: 'profile-version-1', ruleEvaluationId: 'rule-1', status: 'NEEDS_REVIEW', recommendation: 'MANUAL_REVIEW', overallScore: 72, confidence: 80, safeErrorCode: 'AI_DISABLED', safeErrorMessage: 'AI evaluation is unavailable; deterministic result remains available', stale: false, createdAt: '2026-08-30T12:00:00Z', completedAt: '2026-08-30T12:00:01Z' }
+    vi.spyOn(jobsApi, 'get').mockResolvedValue(job)
+    vi.spyOn(jobsApi, 'duplicates').mockResolvedValue([])
+    const evaluate = vi.spyOn(evaluationsApi, 'evaluate').mockResolvedValue(evaluation)
+    router(<Routes><Route path="/jobs/:jobId" element={<JobDetailPage />} /></Routes>, `/jobs/${job.id}`)
+    fireEvent.click(await screen.findByRole('button', { name: 'Evaluate job' }))
+    await waitFor(() => expect(evaluate).toHaveBeenCalledWith(job.id))
+    expect(await screen.findByText('NEEDS_REVIEW')).toBeInTheDocument()
+    expect(screen.getByText(/AI scoring is disabled/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Generate application draft' })).toBeEnabled()
   })
 
   it('archives an active job', async () => {

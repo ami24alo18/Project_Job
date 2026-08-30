@@ -13,4 +13,5 @@ interface JobSourceRunRepository extends JpaRepository<JobSourceRun,UUID>,JpaSpe
     Optional<JobSourceRun>findFirstBySourceIdAndStatusInOrderByCreatedAtDescIdDesc(
             UUID sourceId,Collection<JobSourceRunStatus>statuses);
     Optional<JobSourceRun>findFirstBySourceIdAndIdNotOrderByCreatedAtDescIdDesc(UUID sourceId,UUID excludedRunId);
+    Optional<JobSourceRun>findByExternalEventId(UUID externalEventId);
 }

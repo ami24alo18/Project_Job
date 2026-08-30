@@ -67,6 +67,10 @@ class Phase3JobSourceApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.providerIdentifier").value("example"))
                 .andExpect(jsonPath("$.region").value("GLOBAL"))
+                .andExpect(jsonPath("$.sourceCategory").value("PULL_FEED"))
+                .andExpect(jsonPath("$.connectorType").value("LEVER"))
+                .andExpect(jsonPath("$.supportStatus").value("SUPPORTED"))
+                .andExpect(jsonPath("$.webhookConfigured").value(false))
                 .andExpect(jsonPath("$.enabled").value(true))
                 .andExpect(jsonPath("$.recordVersion").value(0));
         mvc.perform(get("/api/v1/job-sources").with(httpBasic(USER, PASSWORD)))
@@ -236,6 +240,7 @@ class Phase3JobSourceApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sourceId").value(sourceId))
                 .andExpect(jsonPath("$.triggerType").value("MANUAL"))
+                .andExpect(jsonPath("$.coverage").value("COMPLETE_INVENTORY"))
                 .andExpect(jsonPath("$.status").value("QUEUED"));
         mvc.perform(get("/api/v1/job-sources/{sourceId}/runs", sourceId)
                         .with(httpBasic(USER, PASSWORD)).param("status", "QUEUED"))

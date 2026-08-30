@@ -15,25 +15,32 @@ public final class ProviderEndpointResolver {
     private static final URI LEVER_GLOBAL = URI.create("https://api.lever.co/v0/postings/");
     private static final URI LEVER_EU = URI.create("https://api.eu.lever.co/v0/postings/");
     private static final URI GREENHOUSE = URI.create("https://boards-api.greenhouse.io/v1/boards/");
+    private static final URI SMARTRECRUITERS = URI.create("https://api.smartrecruiters.com/v1/companies/");
 
     private final URI leverGlobal;
     private final URI leverEu;
     private final URI greenhouse;
+    private final URI smartRecruiters;
     private final boolean productionAllowlist;
 
     public ProviderEndpointResolver() {
-        this(LEVER_GLOBAL, LEVER_EU, GREENHOUSE, true);
+        this(LEVER_GLOBAL, LEVER_EU, GREENHOUSE, SMARTRECRUITERS, true);
     }
 
     /** Package-private seam for local WireMock contract tests only. */
     ProviderEndpointResolver(URI leverGlobal, URI leverEu, URI greenhouse) {
-        this(leverGlobal, leverEu, greenhouse, false);
+        this(leverGlobal, leverEu, greenhouse, SMARTRECRUITERS, false);
     }
 
-    private ProviderEndpointResolver(URI leverGlobal, URI leverEu, URI greenhouse, boolean productionAllowlist) {
+    ProviderEndpointResolver(URI leverGlobal, URI leverEu, URI greenhouse, URI smartRecruiters) {
+        this(leverGlobal, leverEu, greenhouse, smartRecruiters, false);
+    }
+
+    private ProviderEndpointResolver(URI leverGlobal, URI leverEu, URI greenhouse, URI smartRecruiters, boolean productionAllowlist) {
         this.leverGlobal = base(leverGlobal);
         this.leverEu = base(leverEu);
         this.greenhouse = base(greenhouse);
+        this.smartRecruiters = base(smartRecruiters);
         this.productionAllowlist = productionAllowlist;
     }
 
@@ -59,6 +66,19 @@ public final class ProviderEndpointResolver {
         }
         URI endpoint = build(greenhouse, boardToken + "/jobs", "content=true");
         validateResolved(endpoint, JobSourceType.GREENHOUSE, selected);
+        return endpoint;
+    }
+
+    public URI smartRecruitersPostings(String companyIdentifier, int offset, int limit) {
+        validateIdentifier(companyIdentifier);
+        if (offset < 0 || limit < 1 || limit > 100) throw invalidConfiguration("SmartRecruiters pagination values are invalid");
+        URI endpoint = build(smartRecruiters, companyIdentifier + "/postings",
+                "destination=PUBLIC&offset=" + offset + "&limit=" + limit);
+        if (productionAllowlist && !("https".equals(endpoint.getScheme())
+                && "api.smartrecruiters.com".equals(endpoint.getHost()))) {
+            throw new SourceFetchException(SourceFetchErrorCode.ENDPOINT_NOT_ALLOWED,
+                    "The resolved provider endpoint is not allowlisted");
+        }
         return endpoint;
     }
 

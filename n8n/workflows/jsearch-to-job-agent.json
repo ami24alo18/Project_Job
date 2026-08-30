@@ -1,0 +1,248 @@
+{
+  "name": "JSearch to Job Application Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Setup required\n1. Select a RapidAPI header credential on **Fetch Jobs (JSearch)**.\n2. Create a header-auth credential on **Send Batch to Job Agent** with header `X-Job-Agent-Webhook-Token` and the one-time source token.\n3. Replace `sourceId`, `jobAgentBaseUrl`, `query`, and optional `searchRuleId` in **Configure Source**.\n4. Test manually before activating the hourly schedule.\n\nThe application database is the system of record. This workflow maps and sends every returned job (up to 100); it does not write only the first row to Google Sheets.",
+        "height": 380,
+        "width": 460
+      },
+      "id": "a6a6b183-236a-4b2b-ac38-74ef15c06b03",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "3be11d0c-a741-4fc0-89c9-9e78ca3c2f80",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        96,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1f34017f-2c09-42ec-bb45-ef05fbb783f4",
+              "name": "jobAgentBaseUrl",
+              "value": "http://host.docker.internal:8080",
+              "type": "string"
+            },
+            {
+              "id": "9259de7f-c176-4cb2-8391-5bcb78157187",
+              "name": "sourceId",
+              "value": "REPLACE_WITH_EXTERNAL_SOURCE_UUID",
+              "type": "string"
+            },
+            {
+              "id": "e04665b6-e961-4831-899e-acd97cfd99bb",
+              "name": "searchRuleId",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "06916133-8c8c-4a4f-bafa-48b8cb2f682b",
+              "name": "query",
+              "value": "Java Backend Developer in India",
+              "type": "string"
+            },
+            {
+              "id": "ebffb33a-958c-493f-9281-a64267be2cd4",
+              "name": "datePosted",
+              "value": "today",
+              "type": "string"
+            },
+            {
+              "id": "e8061f1b-b3d3-498d-b06b-ebbd8f59494f",
+              "name": "maximumResults",
+              "value": 100,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "684c3e73-4955-4cf7-8c74-254824cfa208",
+      "name": "Configure Source",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://jsearch.p.rapidapi.com/search-v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "date_posted",
+              "value": "={{ $json.datePosted }}"
+            },
+            {
+              "name": "num_pages",
+              "value": "1"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-rapidapi-host",
+              "value": "jsearch.p.rapidapi.com"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "1a900f3f-f7e7-4a06-a545-2eb00da802a5",
+      "name": "Fetch Jobs (JSearch)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        560,
+        448
+      ],
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "6x8EvRnUKr7OsgOZ",
+          "name": "RapidAPI (Amit G)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst config = $('Configure Source').first().json;\nconst rawJobs = Array.isArray(response?.data?.jobs) ? response.data.jobs : [];\nconst limit = Math.min(Math.max(Number(config.maximumResults) || 100, 1), 100);\n\nconst employment = (value) => {\n  const normalized = String(value || '').toUpperCase().replace(/[^A-Z]/g, '');\n  return ({ FULLTIME: 'FULL_TIME', PARTTIME: 'PART_TIME', CONTRACTOR: 'CONTRACT', CONTRACT: 'CONTRACT', TEMPORARY: 'TEMPORARY', INTERN: 'INTERNSHIP', INTERNSHIP: 'INTERNSHIP' })[normalized] || 'UNSPECIFIED';\n};\nconst interval = (value) => {\n  const normalized = String(value || '').toUpperCase();\n  return ['HOUR', 'DAY', 'WEEK', 'MONTH', 'YEAR'].includes(normalized) ? normalized : 'UNSPECIFIED';\n};\nconst isoOrNull = (value) => {\n  if (!value) return null;\n  const parsed = new Date(value);\n  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();\n};\nconst bounded = (value, size) => value == null ? null : String(value).trim().slice(0, size) || null;\n\nconst jobs = rawJobs\n  .filter((job) => job?.job_id)\n  .slice(0, limit)\n  .map((job) => ({\n    externalId: String(job.job_id),\n    originPublisher: bounded(job.job_publisher, 80),\n    company: bounded(job.employer_name, 200),\n    title: bounded(job.job_title, 300),\n    location: bounded(job.job_location, 300),\n    countryCode: /^[A-Za-z]{2}$/.test(String(job.job_country || '')) ? String(job.job_country).toUpperCase() : null,\n    workplaceType: job.job_is_remote === true ? 'REMOTE' : 'UNSPECIFIED',\n    employmentType: employment(job.job_employment_type),\n    department: null,\n    team: null,\n    description: job.job_description == null ? null : String(job.job_description),\n    applyUrl: bounded(job.job_apply_link, 2000),\n    sourceUrl: bounded(job.job_google_link || job.job_apply_link, 2000),\n    salaryMinimum: Number.isFinite(Number(job.job_min_salary)) ? Number(job.job_min_salary) : null,\n    salaryMaximum: Number.isFinite(Number(job.job_max_salary)) ? Number(job.job_max_salary) : null,\n    salaryCurrency: /^[A-Za-z]{3}$/.test(String(job.job_salary_currency || '')) ? String(job.job_salary_currency).toUpperCase() : null,\n    salaryInterval: interval(job.job_salary_period),\n    publishedAt: isoOrNull(job.job_posted_at_datetime_utc),\n    sourceUpdatedAt: null,\n    expiresAt: isoOrNull(job.job_offer_expiration_datetime_utc),\n  }));\n\nif (jobs.length === 0) {\n  throw new Error('JSearch returned no records with a stable job_id; nothing was sent');\n}\n\nconst eventId = `n8n-${$execution.id}-${config.sourceId}`;\nreturn [{ json: {\n  eventId,\n  ingestionProvider: 'JSEARCH',\n  searchRuleId: config.searchRuleId || null,\n  query: config.query,\n  fetchedAt: new Date().toISOString(),\n  jobs,\n} }];"
+      },
+      "id": "fcac6610-45b0-4e0d-a250-3f1363054fcc",
+      "name": "Map All Jobs to Contract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configure Source').first().json.jobAgentBaseUrl + '/api/v1/job-sources/' + $('Configure Source').first().json.sourceId + '/external-events' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ $json.eventId }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "2a5791f1-bcff-4dbf-8b2a-2fd58dbc5f35",
+      "name": "Send Batch to Job Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1056,
+        448
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Configure Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure Source": {
+      "main": [
+        [
+          {
+            "node": "Fetch Jobs (JSearch)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Jobs (JSearch)": {
+      "main": [
+        [
+          {
+            "node": "Map All Jobs to Contract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map All Jobs to Contract": {
+      "main": [
+        [
+          {
+            "node": "Send Batch to Job Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "b7043dd6-c444-4342-87cf-0b6c35d4a287",
+  "meta": {
+    "instanceId": "2a895b2004883d217a8bb37db1897def8e002fbd5d2ba1ced654d6b99ec374cc"
+  },
+  "nodeGroups": [],
+  "id": "uD6YBGfrUjYaf0pA",
+  "tags": []
+}

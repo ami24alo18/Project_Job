@@ -1,7 +1,6 @@
 package com.amit.jobagent.jobsource;
 
 import com.amit.jobagent.job.JobPostingService;
-import com.amit.jobagent.job.JobSourceType;
 import com.amit.jobagent.jobsource.connector.JobSourceConnector;
 import com.amit.jobagent.jobsource.connector.SourceCheckpoint;
 import com.amit.jobagent.jobsource.connector.SourceFetchErrorCode;
@@ -26,8 +25,8 @@ class JobSourceSyncWorker {
 
     private final JobSourceRunPersistenceService persistence;
     private final JobPostingService jobs;
-    private final Map<JobSourceType, JobSourceConnector> connectors;
-    private final Map<JobSourceType, JobSourceNormalizer> normalizers;
+    private final Map<JobSourceConnectorType, JobSourceConnector> connectors;
+    private final Map<JobSourceConnectorType, JobSourceNormalizer> normalizers;
 
     JobSourceSyncWorker(
             JobSourceRunPersistenceService persistence,
@@ -36,26 +35,31 @@ class JobSourceSyncWorker {
             List<JobSourceNormalizer> normalizers) {
         this.persistence = persistence;
         this.jobs = jobs;
-        this.connectors = new EnumMap<>(JobSourceType.class);
-        connectors.forEach(connector -> this.connectors.put(connector.supportedType(), connector));
-        this.normalizers = new EnumMap<>(JobSourceType.class);
-        normalizers.forEach(normalizer -> this.normalizers.put(normalizer.supportedType(), normalizer));
+        this.connectors = new EnumMap<>(JobSourceConnectorType.class);
+        connectors.forEach(connector -> this.connectors.put(connector.supportedConnector() == null
+                ? JobSourceConnectorType.defaultFor(connector.supportedType()) : connector.supportedConnector(), connector));
+        this.normalizers = new EnumMap<>(JobSourceConnectorType.class);
+        normalizers.forEach(normalizer -> this.normalizers.put(normalizer.supportedConnector() == null
+                ? JobSourceConnectorType.defaultFor(normalizer.supportedType()) : normalizer.supportedConnector(), normalizer));
     }
 
     void execute(UUID runId) {
         LOG.info("Starting authorized job-source synchronization runId={}", runId);
         try {
             var source = persistence.begin(runId);
-            var connector = require(connectors, source.sourceType(), "connector");
-            var normalizer = require(normalizers, source.sourceType(), "normalizer");
-            String priorCheckpoint = source.sourceType() == JobSourceType.LEVER
+            var connector = require(connectors, source.connectorType(), "connector");
+            var normalizer = require(normalizers, source.connectorType(), "normalizer");
+            String priorCheckpoint = source.connectorType() == JobSourceConnectorType.LEVER
                     ? persistence.resumableCheckpoint(source.sourceId(), runId)
                     : null;
             var scan = ScanCycle.start(source, runId, priorCheckpoint);
             var fetched = connector.fetch(new SourceFetchRequest(
                     source.sourceType(),
+                    source.connectorType(),
                     source.providerIdentifier(),
                     source.region(),
+                    source.careerSiteUrl(),
+                    source.canonicalHost(),
                     source.pageSize(),
                     source.maximumPages(),
                     scan.fetchCheckpoint()));
@@ -89,7 +93,7 @@ class JobSourceSyncWorker {
 
             int removed = 0;
             boolean fullySuccessful = fetched.complete() && failed == 0 && !scan.tainted();
-            if (fullySuccessful) {
+            if (fullySuccessful && source.coverage() == JobSourceRunCoverage.COMPLETE_INVENTORY) {
                 removed = jobs.markMissingAfterSuccessfulRun(
                         source.sourceId(), scan.seenRunId(), source.missingRunThreshold()).removedCount();
             } else if (fetched.complete() && failed == 0 && scan.tainted()) {
@@ -140,7 +144,7 @@ class JobSourceSyncWorker {
         persistence.reconcileStale();
     }
 
-    private static <T> T require(Map<JobSourceType, T> map, JobSourceType type, String kind) {
+    private static <T> T require(Map<JobSourceConnectorType, T> map, JobSourceConnectorType type, String kind) {
         var value = map.get(type);
         if (value == null) {
             throw new SourceFetchException(
@@ -163,8 +167,8 @@ class JobSourceSyncWorker {
 
     private record ScanCycle(UUID seenRunId, SourceCheckpoint fetchCheckpoint, boolean tainted, boolean lever) {
         private static ScanCycle start(JobSourceRunContext source, UUID currentRunId, String persisted) {
-            if (source.sourceType() != JobSourceType.LEVER || persisted == null) {
-                return fresh(currentRunId, source.sourceType() == JobSourceType.LEVER);
+            if (source.connectorType() != JobSourceConnectorType.LEVER || persisted == null) {
+                return fresh(currentRunId, source.connectorType() == JobSourceConnectorType.LEVER);
             }
             try {
                 String[] fields = persisted.split("\\|", -1);

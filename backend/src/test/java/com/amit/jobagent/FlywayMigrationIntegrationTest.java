@@ -23,8 +23,8 @@ class FlywayMigrationIntegrationTest {
         if(target!=null)config.target(target);return config.load();
     }
 
-    @Test void migratesCleanDatabaseThroughPhaseFive()throws Exception{
-        var f=flyway(null);f.clean();var result=f.migrate();assertThat(result.targetSchemaVersion).isEqualTo("7");
+    @Test void migratesCleanDatabaseThroughUnifiedJobSourceFoundation()throws Exception{
+        var f=flyway(null);f.clean();var result=f.migrate();assertThat(result.targetSchemaVersion).isEqualTo("14");
         try(var c=POSTGRES.createConnection("");var s=c.prepareStatement("SELECT COUNT(*) FROM job_agent.job_posting")){
             assertThat(s.executeQuery().next()).isTrue();
         }
@@ -32,8 +32,8 @@ class FlywayMigrationIntegrationTest {
 
     @Test void migratesFromPhaseTwoBaseline()throws Exception{
         var baseline=flyway("2");baseline.clean();assertThat(baseline.migrate().targetSchemaVersion).isEqualTo("2");
-        var phaseFive=flyway(null);assertThat(phaseFive.migrate().targetSchemaVersion).isEqualTo("7");
-        assertThat(phaseFive.info().current().getVersion().getVersion()).isEqualTo("7");
+        var current=flyway(null);assertThat(current.migrate().targetSchemaVersion).isEqualTo("14");
+        assertThat(current.info().current().getVersion().getVersion()).isEqualTo("14");
     }
 
     @Test void createsPhaseFiveApplicationProvenanceAndArtifactSchema()throws Exception{
@@ -80,6 +80,42 @@ class FlywayMigrationIntegrationTest {
                 run.setObject(1,UUID.randomUUID());run.setObject(2,sourceId);run.executeUpdate();
             }
             assertThatThrownBy(()->{try(var run=c.prepareStatement("INSERT INTO job_agent.job_source_run(id,source_id,trigger_type,status,created_at) VALUES (?,?, 'RETRY','RUNNING',CURRENT_TIMESTAMP)")){run.setObject(1,UUID.randomUUID());run.setObject(2,sourceId);run.executeUpdate();}}).isInstanceOf(SQLException.class);
+        }
+    }
+
+    @Test void createsUnifiedSourceEventRuleAndProvenanceSchema()throws Exception{
+        var f=flyway(null);f.clean();f.migrate();
+        try(var c=POSTGRES.createConnection("");
+            var tables=c.prepareStatement("""
+                    SELECT to_regclass('job_agent.job_source_search_rule'),
+                           to_regclass('job_agent.external_ingestion_event'),
+                           to_regclass('job_agent.external_ingestion_event_result')
+                    """)){
+            var result=tables.executeQuery();assertThat(result.next()).isTrue();
+            assertThat(result.getString(1)).isNotNull();assertThat(result.getString(2)).isNotNull();assertThat(result.getString(3)).isNotNull();
+        }
+        try(var c=POSTGRES.createConnection("");
+            var columns=c.prepareStatement("""
+                    SELECT COUNT(*) FROM information_schema.columns
+                    WHERE table_schema='job_agent' AND (
+                        (table_name='job_source_configuration' AND column_name IN ('connector_type','career_site_url','canonical_host','support_status','webhook_token_hash')) OR
+                        (table_name='job_source_run' AND column_name IN ('coverage','search_rule_id','external_event_id')) OR
+                        (table_name='job_posting' AND column_name IN ('ingestion_provider','origin_publisher','discovery_query','external_event_id'))
+                    )
+                    """)){
+            var result=columns.executeQuery();assertThat(result.next()).isTrue();assertThat(result.getInt(1)).isEqualTo(12);
+        }
+    }
+
+    @Test void acceptsBoundedExternalEventIdentifiersOnPostgres()throws Exception{
+        var f=flyway(null);f.clean();f.migrate();var sourceId=UUID.randomUUID();
+        try(var c=POSTGRES.createConnection("")){
+            insertSource(c,sourceId,"external-event-constraint-board");
+            try(var statement=c.prepareStatement("INSERT INTO job_agent.external_ingestion_event(id,source_id,event_id,ingestion_provider,fetched_at,payload_checksum,status,created_at) VALUES (?,?,?,'JOBSPY',CURRENT_TIMESTAMP,?,'PROCESSING',CURRENT_TIMESTAMP)")){
+                statement.setObject(1,UUID.randomUUID());statement.setObject(2,sourceId);
+                statement.setString(3,"n"+"a".repeat(299));statement.setString(4,"c".repeat(64));
+                assertThat(statement.executeUpdate()).isEqualTo(1);
+            }
         }
     }
 

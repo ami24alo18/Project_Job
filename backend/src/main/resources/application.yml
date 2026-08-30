@@ -52,6 +52,7 @@ job-agent:
   ingestion:
     maximum-description-characters: ${JOB_DESCRIPTION_MAX_CHARACTERS:100000}
     maximum-response-bytes: ${JOB_SOURCE_MAX_RESPONSE_BYTES:5242880}
+    maximum-external-event-bytes: ${EXTERNAL_EVENT_MAX_BYTES:5242880}
     connect-timeout-millis: ${JOB_SOURCE_CONNECT_TIMEOUT_MILLIS:3000}
     request-timeout-millis: ${JOB_SOURCE_REQUEST_TIMEOUT_MILLIS:10000}
     maximum-retries: ${JOB_SOURCE_MAX_RETRIES:2}
@@ -60,6 +61,25 @@ job-agent:
     executor-maximum-pool-size: ${JOB_SOURCE_EXECUTOR_MAX_SIZE:4}
     executor-queue-capacity: ${JOB_SOURCE_EXECUTOR_QUEUE_CAPACITY:50}
     stale-run-after-minutes: ${JOB_SOURCE_STALE_RUN_MINUTES:30}
+  career-discovery:
+    enabled: ${CAREER_SITE_DISCOVERY_ENABLED:true}
+    allowed-ports: [443]
+    connect-timeout-millis: ${CAREER_SITE_CONNECT_TIMEOUT_MILLIS:3000}
+    request-timeout-millis: ${CAREER_SITE_REQUEST_TIMEOUT_MILLIS:10000}
+    maximum-redirects: ${CAREER_SITE_MAX_REDIRECTS:3}
+    maximum-compressed-bytes: ${CAREER_SITE_MAX_COMPRESSED_BYTES:1048576}
+    maximum-decompressed-bytes: ${CAREER_SITE_MAX_DECOMPRESSED_BYTES:2097152}
+    maximum-compression-ratio: ${CAREER_SITE_MAX_COMPRESSION_RATIO:20}
+    maximum-markup-characters: ${CAREER_SITE_MAX_MARKUP_CHARACTERS:2000000}
+    maximum-markup-nodes: ${CAREER_SITE_MAX_MARKUP_NODES:20000}
+    maximum-concurrent-requests: ${CAREER_SITE_MAX_CONCURRENT_REQUESTS:2}
+    maximum-requests-per-host-per-minute: ${CAREER_SITE_MAX_REQUESTS_PER_HOST_PER_MINUTE:10}
+    cache-ttl-seconds: ${CAREER_SITE_CACHE_TTL_SECONDS:300}
+  extraction-recipes:
+    enabled: ${CAREER_SITE_EXTRACTION_RECIPES_ENABLED:false}
+    definitions: []
+  jobspy:
+    allowed-sites: ${JOBSPY_ALLOWED_SITES:}
   ai:
     enabled: ${AI_EVALUATION_ENABLED:false}
     api-key: ${OPENAI_API_KEY:}

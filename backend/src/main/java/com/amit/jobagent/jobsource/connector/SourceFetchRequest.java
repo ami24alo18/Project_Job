@@ -1,19 +1,24 @@
 package com.amit.jobagent.jobsource.connector;
 
 import com.amit.jobagent.job.JobSourceType;
+import com.amit.jobagent.jobsource.JobSourceConnectorType;
 import java.util.Objects;
 
 /** Provider-neutral, bounded input to a public-feed connector. */
 public record SourceFetchRequest(
         JobSourceType sourceType,
+        JobSourceConnectorType connectorType,
         String providerIdentifier,
         SourceRegion region,
+        String careerSiteUrl,
+        String canonicalHost,
         int pageSize,
         int maximumPages,
         SourceCheckpoint checkpoint) {
 
     public SourceFetchRequest {
         sourceType = Objects.requireNonNull(sourceType, "sourceType is required");
+        connectorType = connectorType == null ? JobSourceConnectorType.defaultFor(sourceType) : connectorType;
         providerIdentifier = Objects.requireNonNull(providerIdentifier, "providerIdentifier is required").trim();
         region = region == null ? SourceRegion.DEFAULT : region;
         checkpoint = checkpoint == null ? SourceCheckpoint.beginning() : checkpoint;
@@ -26,5 +31,11 @@ public record SourceFetchRequest(
         if (maximumPages < 1 || maximumPages > 100) {
             throw new IllegalArgumentException("maximumPages must be between 1 and 100");
         }
+    }
+
+    public SourceFetchRequest(JobSourceType sourceType, String providerIdentifier, SourceRegion region,
+            int pageSize, int maximumPages, SourceCheckpoint checkpoint) {
+        this(sourceType, JobSourceConnectorType.defaultFor(sourceType), providerIdentifier, region,
+                null, null, pageSize, maximumPages, checkpoint);
     }
 }

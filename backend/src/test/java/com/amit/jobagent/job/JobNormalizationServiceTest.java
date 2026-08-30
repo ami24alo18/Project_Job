@@ -194,6 +194,36 @@ class JobNormalizationServiceTest {
         assertThat(otherLocation.fingerprint()).isNotEqualTo(baseline.fingerprint());
     }
 
+    @Test
+    void preservesExplicitExternalIngestionProvenance() {
+        UUID eventId = UUID.fromString("20000000-0000-0000-0000-000000000001");
+        JobCandidate external = new JobCandidate(
+                SOURCE_ID, JobSourceType.EXTERNAL_API, "jsearch-42", "Example Systems", "Backend Engineer",
+                "Remote", "IN", WorkplaceType.REMOTE, EmploymentType.FULL_TIME, null, null,
+                "Build services", false, "https://example.test/jobs/42", "https://linkedin.com/jobs/view/42",
+                null, null, null, null, NOW, NOW, null, JobIngestionProvider.JSEARCH, "LinkedIn",
+                "Java backend developer in India", eventId, null);
+
+        NormalizedJob normalized = service(1_000).normalize(external);
+
+        assertThat(normalized.ingestionProvider()).isEqualTo(JobIngestionProvider.JSEARCH);
+        assertThat(normalized.originPublisher()).isEqualTo("LinkedIn");
+        assertThat(normalized.discoveryQuery()).isEqualTo("Java backend developer in India");
+        assertThat(normalized.externalEventId()).isEqualTo(eventId);
+    }
+
+    @Test
+    void requiresProviderForExternalAndCareerSources() {
+        JobCandidate missingProvider = new JobCandidate(
+                SOURCE_ID, JobSourceType.EXTERNAL_API, "external-1", "Example", "Engineer", null, null,
+                null, null, null, null, "Description", false, null, null, null, null, null, null,
+                null, null, null);
+
+        assertThatThrownBy(() -> service(1_000).normalize(missingProvider))
+                .isInstanceOf(DomainValidationException.class)
+                .hasMessage("Ingestion provider is required for this source type");
+    }
+
     private static JobNormalizationService service(int maximumDescriptionCharacters) {
         JobIngestionProperties properties = new JobIngestionProperties(
                 maximumDescriptionCharacters, 1_000_000, 500, 1_000, 2, 10, 1, 1, 10, 5);

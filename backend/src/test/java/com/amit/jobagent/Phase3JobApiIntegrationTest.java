@@ -83,6 +83,7 @@ class Phase3JobApiIntegrationTest {
                 .andExpect(jsonPath("$.salaryCurrency").value("INR"))
                 .andExpect(jsonPath("$.applyUrl").value("https://careers.example.test/roles/123?job=123"))
                 .andExpect(jsonPath("$.status").value("READY_FOR_EVALUATION"))
+                .andExpect(jsonPath("$.ingestionProvider").value("MANUAL"))
                 .andExpect(jsonPath("$.recordVersion").value(0))
                 .andReturn().getResponse().getContentAsString());
 

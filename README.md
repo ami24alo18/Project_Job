@@ -22,7 +22,7 @@ A self-hosted, human-controlled job application workspace. Phase 2 provides cand
 
 The backend is a Java 21 Spring Boot modular monolith backed by PostgreSQL and Flyway. React, TypeScript, Vite, Material UI, React Router, and Axios provide the UI. Resume and generated application artifacts are private MinIO objects while searchable metadata, extracted resume text, normalized jobs, source configurations, source-run history, application-package revisions, structured generated content, and claim provenance live in PostgreSQL. Self-hosted n8n owns bounded scheduling/orchestration; remote provider access remains behind backend adapters.
 
-See [ADR-001](docs/architecture/ADR-001-modular-monolith.md), [ADR-002](docs/architecture/ADR-002-verified-resume-fact-bank.md), [ADR-003](docs/architecture/ADR-003-authorized-job-ingestion.md), [ADR-004](docs/architecture/ADR-004-explainable-ai-job-matching.md), [ADR-005](docs/architecture/ADR-005-verified-application-content-and-deterministic-document-generation.md), the [Phase 1 report](docs/phase-1-foundation.md), the [Phase 2 report](docs/phase-2-candidate-profile.md), the [Phase 3 report](docs/phase-3-job-ingestion.md), the [Phase 4 report](docs/phase-4-ai-job-matching.md), and the [Phase 5 guide](docs/phase-5-verified-application-packages.md).
+See [ADR-001](docs/architecture/ADR-001-modular-monolith.md), [ADR-002](docs/architecture/ADR-002-verified-resume-fact-bank.md), [ADR-003](docs/architecture/ADR-003-authorized-job-ingestion.md), [ADR-004](docs/architecture/ADR-004-explainable-ai-job-matching.md), [ADR-005](docs/architecture/ADR-005-verified-application-content-and-deterministic-document-generation.md), [ADR-008](docs/architecture/ADR-008-unified-career-site-and-external-job-ingestion.md), [ADR-009](docs/architecture/ADR-009-jobspy-private-worker.md), the [Phase 1 report](docs/phase-1-foundation.md), the [Phase 2 report](docs/phase-2-candidate-profile.md), the [Phase 3 report](docs/phase-3-job-ingestion.md), the [Phase 4 report](docs/phase-4-ai-job-matching.md), and the [Phase 5 guide](docs/phase-5-verified-application-packages.md). The implemented source expansion is defined by the [unified ingestion API contract](docs/unified-job-source-ingestion-contract.md), [career-site threat model](docs/career-site-discovery-threat-model.md), [n8n/JSearch guide](docs/n8n-jsearch-integration.md), and [JobSpy/n8n guide](docs/jobspy-n8n-integration.md).
 
 ## Prerequisites
 
@@ -52,6 +52,13 @@ Important settings are:
 | `JOB_SOURCE_MAX_RETRIES`, `JOB_SOURCE_RETRY_BASE_DELAY_MILLIS` | Bounded safe-GET retry policy | `2` / `250` ms |
 | `JOB_SOURCE_EXECUTOR_*` | Bounded synchronization worker and queue sizes | See `.env.example` |
 | `JOB_SOURCE_STALE_RUN_MINUTES` | Age at which startup reconciliation fails an abandoned active run | `30` minutes |
+| `EXTERNAL_EVENT_MAX_BYTES` | Maximum authenticated external batch request | 5 MiB (`5242880`) |
+| `JOBSPY_WORKER_TOKEN` | Authentication between n8n and the private JobSpy worker | Required; at least 24 random characters |
+| `JOBSPY_ALLOWED_SITES` | Deployment-approved JobSpy board identifiers | Empty; no board calls are allowed by default |
+| `JOBSPY_*` | Worker request/result/timeout/concurrency bounds | See `.env.example` |
+| `CAREER_SITE_DISCOVERY_ENABLED` | Enables guarded read-only career URL inspection | `true` |
+| `CAREER_SITE_*` | DNS/redirect/body/parser/concurrency/rate/cache discovery bounds | See `.env.example` |
+| `CAREER_SITE_EXTRACTION_RECIPES_ENABLED` | Allows association of deployment-reviewed recipe metadata | `false`; no recipe runtime runs in Spring |
 | `APPLICATION_PACKAGE_AUTOMATION_ENABLED` | Allows only eligible n8n package requests; backend policy still applies | `false` |
 | `OPENAI_CONTENT_GENERATION_ENABLED` | Enables provider-backed Phase 5 planning/writing | `false` |
 | `OPENAI_CONTENT_GENERATION_MODEL`, `OPENAI_CONTENT_GENERATION_REASONING_EFFORT` | Phase 5 model and reasoning configuration | `gpt-5.6-terra` / `low` |
@@ -117,11 +124,18 @@ Future automation must consume an active published version, not mutable draft ta
 | Manual | No source configuration | Not applicable | Validates links as data and never fetches them |
 | Lever | Public Lever site/company identifier | `GLOBAL` or `EU` | GETs the documented public Postings API only |
 | Greenhouse | Public job-board token | `DEFAULT` | GETs the documented public Job Board API only |
+| SmartRecruiters career site | Company career URL discovered by the server | `DEFAULT` | GETs the fixed public Posting API host; complete inventory when every bounded page is read |
+| Generic JSON-LD career page | HTTPS career/job URL discovered by the server | `DEFAULT` | Guarded fetch of that page only; reads bounded `JobPosting` JSON-LD as filtered coverage |
+| Oracle Recruiting / Workday | Career URL may be detected and saved disabled | `DEFAULT` | No fetch adapter is enabled without an approved public interface/authorization |
+| External API (JSearch/JobSpy/custom webhook) | Source-scoped token plus optional search rules | `DEFAULT` | Receives bounded normalized batches from n8n; never fetches publisher links |
+| Reviewed custom recipe | Disabled career source associated with deployment-owned recipe metadata | `DEFAULT` | A separately isolated worker pushes batches; Spring executes no browser or recipe code |
 | Email webhook | Logical alert source name | `DEFAULT` | Receives approved structured fields from n8n; fetches no links |
 
 Create and manage sources at `/job-sources`. A source contains a display name, source type, provider identifier, supported region, page/run limits, missing-run threshold, and enabled state. Lever uses the site identifier from its hosted postings feed; choose `GLOBAL` for `api.lever.co` or `EU` for `api.eu.lever.co`. Greenhouse uses the board token found in the organization's public job-board URL, not a Harvest API key or employer credential. Because a public feed may omit a company field, the backend uses the source display name as that source's fallback normalized company; choose a stable employer name rather than an operational nickname. Email sources use the logical name that n8n sends as `sourceName`; matching trims surrounding whitespace and is case-insensitive.
 
-Source configuration never accepts a base URL, scheme, host, path, header, credential, or executable request data. The backend selects fixed official HTTPS hosts from source type and region. Duplicate active type/identifier/region combinations are rejected, and archived configurations remain as history instead of being deleted.
+For a career site, use **Inspect career site** on `/job-sources`. The server canonicalizes and safely inspects the supplied HTTPS URL, displays its detected connector and support status, and repeats detection during creation instead of trusting the browser. Supported sources can be created and connection-tested. Unsupported or authorization-dependent sites are retained disabled. A deployment-reviewed custom recipe can later be associated by ID; recipe implementations, selectors, scripts, cookies, headers, and credentials are never accepted by the API.
+
+Ordinary provider configuration never accepts a base URL, scheme, host, path, header, credential, or executable request data. The backend selects fixed official HTTPS hosts from source type and region. Career discovery uses a DNS-validated, address-pinned HTTPS transport with redirect and response bounds. Duplicate active type/identifier/region combinations are rejected, and archived configurations remain as history instead of being deleted.
 
 ### Manual entry
 
@@ -131,11 +145,11 @@ Manual and provider jobs pass through the same normalization, URL canonicalizati
 
 ### Synchronization and source runs
 
-An authenticated user can queue one source from `/job-sources` or `POST /api/v1/job-sources/{sourceId}/sync`. `POST /api/v1/job-sources/sync-enabled` considers every enabled Lever and Greenhouse source and is intended for n8n. A successful per-source request returns `202 Accepted` with its durable run identifier; an overlapping per-source request returns `409 Conflict`. The bulk endpoint returns `202 Accepted` with one entry per enabled source, reusing the current run identifier and status when that source already has an active run. Spring uses a bounded executor and does not run an internal schedule.
+An authenticated user can queue one pull source from `/job-sources` or `POST /api/v1/job-sources/{sourceId}/sync`. `POST /api/v1/job-sources/sync-enabled` considers enabled Lever, Greenhouse, SmartRecruiters, and Generic JSON-LD pull sources and is intended for n8n; push-only external/custom-recipe sources are excluded. A successful per-source request returns `202 Accepted` with its durable run identifier; an overlapping per-source request returns `409 Conflict`. The bulk endpoint returns `202 Accepted` with one entry per enabled pull source, reusing the current run identifier and status when that source already has an active run. Spring uses a bounded executor and does not run an internal schedule.
 
 Inspect runs at `/job-source-runs`. Runs progress through `QUEUED`, `RUNNING`, and a terminal `SUCCEEDED`, `PARTIAL_SUCCESS`, or `FAILED` state and record discovered, created, updated, unchanged, duplicate, failed, and removed counts plus safe diagnostics. Provider calls occur outside database transactions. Run/source diagnostic context is propagated to worker threads so operational logs can be correlated without logging descriptions or raw responses. Only safe GETs may use bounded retry/backoff; permanent `4xx` responses other than `429` are not retried.
 
-Only a complete successful source snapshot advances a missing-job count. Failed, partial, truncated, or page-limit-exhausted runs cannot mark a posting removed. After the configured number of complete successful runs omit a job, it becomes `SOURCE_REMOVED`; reappearance resets the counter and restores it unless it was manually archived. A job becomes `EXPIRED` only from a trusted structured expiry date or an explicit user action, never merely because it is old.
+Only a complete successful source snapshot advances a missing-job count. Filtered Generic JSON-LD results and push batches never remove unseen jobs. Failed, partial, truncated, or page-limit-exhausted runs cannot mark a posting removed. After the configured number of complete successful runs omit a job, it becomes `SOURCE_REMOVED`; reappearance resets the counter and restores it unless it was manually archived. A job becomes `EXPIRED` only from a trusted structured expiry date or an explicit user action, never merely because it is old.
 
 ### Deterministic updates and deduplication
 
@@ -151,7 +165,7 @@ Known tracking parameters such as `utm_*` do not create a new URL identity, whil
 
 Job descriptions, provider fields, and email-mapped values are untrusted. HTML is parsed into bounded plain text; scripts, styles, markup, unsafe control characters, and excess content are removed before persistence. React renders only normalized text and opens a validated external application link through an explicit user action in a separate tab. Complete descriptions and raw provider/email payloads are excluded from audit metadata and logs.
 
-Provider endpoints are derived from a strict Lever/Greenhouse allowlist. Source configuration cannot select an arbitrary URL, IP address, local-network target, redirect host, `file:`, or `ftp:` destination. Links found in jobs, manual submissions, or email alerts are stored as data and never fetched. The connectors use no private employer API keys and never call an application-submission endpoint.
+Provider API endpoints are derived from strict fixed-host allowlists. Guarded career discovery rejects literal/non-public destinations, validates every DNS answer and redirect, pins the validated address while preserving TLS hostname verification, and enforces byte/time/parser/rate/concurrency limits. Source configuration cannot reach an arbitrary IP, local-network target, `file:`, or `ftp:` destination. Links found in jobs, manual submissions, email alerts, or provider content are stored as data and never followed. The connectors never call an application-submission endpoint.
 
 ## Phase 5 draft workflow
 
@@ -191,6 +205,10 @@ curl -X POST http://localhost:8080/api/v1/system/n8n/ping -H "X-N8N-WEBHOOK-SECR
 The response must contain `"status":"ACKNOWLEDGED"`. Never commit the real secret or place it directly in an exported workflow.
 
 For scheduled source synchronization, follow the [Phase 3 scheduled-sync guide](automation/n8n-workflows/phase-3-scheduled-sync.md): create an n8n HTTP Basic Auth credential, schedule `POST http://backend:8080/api/v1/job-sources/sync-enabled`, split the returned run IDs, and poll their authenticated run endpoints with a visible finite attempt count. Successful runs finish silently; only failed, partial, malformed, or timed-out branches should notify. Credentials belong in n8n credentials, never in nodes or exports.
+
+For LinkedIn-style search through JSearch, follow the [n8n/JSearch integration guide](docs/n8n-jsearch-integration.md) and import the sanitized workflow at `n8n/workflows/jsearch-to-job-agent.json`. Create the external source in `/job-sources`, copy its one-time token into an n8n credential, map provider results to the stable external-event contract, and POST them directly to the backend. Google Sheets can remain an optional reporting branch; it is not the application database or ingestion boundary.
+
+For the optional JobSpy path, follow the [JobSpy/n8n guide](docs/jobspy-n8n-integration.md) and import `n8n/workflows/jobspy-to-job-agent.json`. JSearch is retained. JobSpy runs in a pinned private worker and contacts only deployment-allowlisted boards; the allowlist is empty by default.
 
 For email alerts, first create an enabled `EMAIL_WEBHOOK` source, then follow the [structured email-mapping guide](automation/n8n-workflows/phase-3-email-alert-mapping.md). Keep mailbox credentials in n8n, accept only a known sender/template, project immediately to the stable message ID and approved job fields, and send them to `POST http://backend:8080/api/v1/job-sources/email-alert/events` with `X-N8N-WEBHOOK-SECRET`. Configure n8n execution-data saving and pruning so a temporary trigger body is not retained longer than explicitly required. Replays must retain the same provider `messageId`; they return the stored acknowledgement with `replayed=true`. A valid event with one or more invalid jobs returns `PARTIAL_SUCCESS` and safe per-job results. Do not forward a complete email body, attachments, unrelated content, or application-page data.
 

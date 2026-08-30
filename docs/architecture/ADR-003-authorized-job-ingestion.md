@@ -3,6 +3,8 @@
 - Status: Accepted
 - Date: 2026-08-22
 
+> **Extension:** [ADR-008](ADR-008-unified-career-site-and-external-job-ingestion.md) preserves these controls for built-in public feeds and adds guarded career-site discovery, source-scoped external batches, and a separately isolated allowlisted extraction fallback. It supersedes only the blanket rejection of every employer-page extraction path; arbitrary fetching and scraping inside the Spring application remain rejected.
+
 ## Context
 
 Phase 3 brings untrusted job data into the self-hosted application from manual entry, public applicant-tracking-system feeds, and structured n8n events. Remote ingestion introduces several risks that are absent from local profile editing: server-side request forgery, unexpectedly large or malformed responses, executable markup, transient provider failures, duplicate postings, and incorrect removal decisions after an incomplete synchronization.

@@ -16,6 +16,13 @@ function runColor(status: JobSourceRunStatus): 'success' | 'warning' | 'error' |
   return 'info'
 }
 
+function coverageMeaning(coverage: JobSourceRun['coverage']) {
+  if (coverage === 'COMPLETE_INVENTORY') return 'A fully successful run may advance missing-job counters.'
+  if (coverage === 'FILTERED_QUERY') return 'This run covers only a filtered or single-page result; unseen jobs are never marked removed.'
+  if (coverage === 'PUSH_BATCH') return 'This run contains only the delivered batch; unseen jobs are never marked removed.'
+  return ''
+}
+
 export function JobSourceRunsPage() {
   const [searchParams] = useSearchParams()
   const [sources, setSources] = useState<JobSourceConfiguration[]>([])
@@ -45,7 +52,7 @@ export function JobSourceRunsPage() {
   const filterStatus = (value: JobSourceRunStatus | '') => { setStatus(value); setPage(0); setPollAttempt(0) }
   const refresh = () => { setPollAttempt(0); void load() }
   return <Stack spacing={3}>
-    <div><Typography variant="h4">Source synchronization runs</Typography><Typography color="text.secondary">Queued and running jobs refresh for at most one minute. Use Refresh to continue after the polling limit.</Typography></div>
+    <div><Typography variant="h4">Source ingestion runs</Typography><Typography color="text.secondary">Pull synchronizations, filtered searches, and pushed webhook batches share one traceable run history. Active runs refresh for at most one minute.</Typography></div>
     {error && <Alert severity="error">{error}</Alert>}
     {sourcesError && <Alert severity="warning">{sourcesError}</Alert>}
     {hasActiveRuns && pollAttempt >= RUN_POLL_LIMIT && <Alert severity="info">Automatic refresh stopped after {RUN_POLL_LIMIT} attempts.</Alert>}
@@ -54,10 +61,11 @@ export function JobSourceRunsPage() {
       <TextField select label="Run status" value={status} onChange={event => filterStatus(event.target.value as JobSourceRunStatus | '')} sx={{ minWidth: 190 }}><MenuItem value="">All statuses</MenuItem>{(['QUEUED', 'RUNNING', 'SUCCEEDED', 'PARTIAL_SUCCESS', 'FAILED'] as const).map(value => <MenuItem key={value} value={value}>{value}</MenuItem>)}</TextField>
       <Button variant="outlined" startIcon={<RefreshIcon />} onClick={refresh}>Refresh</Button>
     </Stack>
-    {loading ? <Typography>Loading source runs…</Typography> : items.length === 0 ? <Typography color="text.secondary">No synchronization runs match these filters.</Typography> : items.map(run => <Paper key={run.id} variant="outlined" sx={{ p: 2 }}><Stack spacing={1}>
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between"><Stack direction="row" spacing={1}><Chip label={run.status} color={runColor(run.status)} /><Chip label={run.triggerType} variant="outlined" /></Stack><Button component={RouterLink} to={`/job-sources/${run.sourceId}`}>View source</Button></Stack>
+    {loading ? <Typography>Loading source runs…</Typography> : items.length === 0 ? <Typography color="text.secondary">No ingestion runs match these filters.</Typography> : items.map(run => <Paper key={run.id} variant="outlined" sx={{ p: 2 }}><Stack spacing={1}>
+      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between"><Stack direction="row" spacing={1} flexWrap="wrap"><Chip label={run.status} color={runColor(run.status)} /><Chip label={run.triggerType} variant="outlined" />{run.coverage && <Chip label={run.coverage} variant="outlined" color={run.coverage === 'COMPLETE_INVENTORY' ? 'success' : 'default'} />}</Stack><Button component={RouterLink} to={`/job-sources/${run.sourceId}`}>View source</Button></Stack>
       <Typography variant="body2">Started: {run.startedAt ? new Date(run.startedAt).toLocaleString() : 'Waiting'} · Completed: {run.completedAt ? new Date(run.completedAt).toLocaleString() : 'Not completed'}</Typography>
       <Typography variant="body2">Discovered {run.discoveredCount} · Created {run.createdCount} · Updated {run.updatedCount} · Unchanged {run.unchangedCount} · Duplicates {run.duplicateCount} · Failed {run.failedCount} · Removed {run.removedCount}</Typography>
+      {run.coverage && <Typography variant="caption" color="text.secondary">{coverageMeaning(run.coverage)}</Typography>}
       {(run.safeErrorCode || run.safeErrorMessage) && <Alert severity={run.status === 'FAILED' ? 'error' : 'warning'}>{run.safeErrorCode && <strong>{run.safeErrorCode}: </strong>}{run.safeErrorMessage || 'The source reported a safe diagnostic code.'}</Alert>}
       {run.errors?.map(problem => <Alert key={problem.id} severity="warning">{problem.externalId && <>Record {problem.externalId}: </>}<strong>{problem.safeErrorCode}</strong> — {problem.safeErrorMessage}</Alert>)}
     </Stack></Paper>)}

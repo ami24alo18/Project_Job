@@ -8,6 +8,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -16,6 +18,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
     @ExceptionHandler(InvalidWebhookSecretException.class)
     ProblemDetail invalidSecret(InvalidWebhookSecretException ex, HttpServletRequest request) { return problem(HttpStatus.FORBIDDEN, "Webhook authentication failed", ex.getMessage(), request); }
     @ExceptionHandler(MissingRequestHeaderException.class)
@@ -52,8 +55,16 @@ public class ApiExceptionHandler {
         var detail=problem(HttpStatus.SERVICE_UNAVAILABLE, "Job source unavailable", ex.getMessage(), request);
         detail.setProperty("errorCode", ex.getSafeCode()); return detail;
     }
+    @ExceptionHandler(CareerSiteDiscoveryException.class)
+    ProblemDetail careerSiteDiscovery(CareerSiteDiscoveryException ex, HttpServletRequest request) {
+        var detail=problem(ex.getStatus(), "Career site inspection failed", ex.getMessage(), request);
+        detail.setProperty("errorCode", ex.getSafeCode()); return detail;
+    }
     @ExceptionHandler(Exception.class)
-    ProblemDetail unexpected(Exception ex, HttpServletRequest request) { return problem(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error", "An unexpected error occurred", request); }
+    ProblemDetail unexpected(Exception ex, HttpServletRequest request) {
+        log.error("Unhandled exception while processing {} {}", request.getMethod(), request.getRequestURI(), ex);
+        return problem(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error", "An unexpected error occurred", request);
+    }
     private ProblemDetail problem(HttpStatus status, String title, String detail, HttpServletRequest request) {
         var problem=ProblemDetail.forStatusAndDetail(status, detail); problem.setTitle(title); problem.setInstance(URI.create(request.getRequestURI())); return problem;
     }

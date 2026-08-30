@@ -52,6 +52,16 @@ public class JobNormalizationService {
         var team = compact(input.team());
         var status = description == null && applyUrl == null ? JobPostingStatus.NEEDS_REVIEW : JobPostingStatus.READY_FOR_EVALUATION;
         if (input.expiresAt() != null && input.expiresAt().isBefore(Instant.now(clock))) status = JobPostingStatus.EXPIRED;
+        var ingestionProvider = input.ingestionProvider() == null
+                ? JobIngestionProvider.defaultFor(input.sourceType())
+                : input.ingestionProvider();
+        if (ingestionProvider == null) {
+            throw new DomainValidationException("Ingestion provider is required for this source type");
+        }
+        var originPublisher = compactLimited(input.originPublisher(), 80, "Origin publisher");
+        var discoveryQuery = compactLimited(input.discoveryQuery(), 500, "Discovery query");
+        var extractionRecipeVersion = compactLimited(
+                input.extractionRecipeVersion(), 80, "Extraction recipe version");
         var fingerprint = hash(identity(company, title, location, urls.hostAndPath(applyUrl)));
         var contentHash = hash(String.join("\u001f",
                 company, title, nullSafe(location), nullSafe(country), workplace.name(), employment.name(),
@@ -61,7 +71,8 @@ public class JobNormalizationService {
         return new NormalizedJob(input.sourceId(), input.sourceType(), externalId, company, title, location, country,
                 workplace, employment, department, team, description, truncated, applyUrl, applyUrl, sourceUrl,
                 input.salaryMinimum(), input.salaryMaximum(), currency, interval, input.publishedAt(),
-                input.sourceUpdatedAt(), input.expiresAt(), fingerprint, contentHash, status);
+                input.sourceUpdatedAt(), input.expiresAt(), fingerprint, contentHash, status, ingestionProvider,
+                originPublisher, discoveryQuery, input.externalEventId(), extractionRecipeVersion);
     }
 
     private static String description(String value, boolean html) {
@@ -89,6 +100,14 @@ public class JobNormalizationService {
         var result = Normalizer.normalize(value, Normalizer.Form.NFC)
                 .replaceAll("[\\p{Cc}]", " ").replaceAll("\\s+", " ").trim();
         return result.isEmpty() ? null : result;
+    }
+
+    private static String compactLimited(String value, int maximumLength, String field) {
+        var compacted = compact(value);
+        if (compacted != null && compacted.length() > maximumLength) {
+            throw new DomainValidationException(field + " exceeds " + maximumLength + " characters");
+        }
+        return compacted;
     }
 
     private static String identity(String company, String title, String location, String hostPath) {

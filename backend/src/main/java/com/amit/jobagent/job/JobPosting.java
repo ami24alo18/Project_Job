@@ -52,12 +52,17 @@ class JobPosting extends MutableEntity {
     @Column(name="source_update_available",nullable=false) private boolean sourceUpdateAvailable;
     @Column(name="last_seen_run_id") private UUID lastSeenRunId;
     @Column(name="manual_idempotency_key",length=200) private String manualIdempotencyKey;
+    @Enumerated(EnumType.STRING) @Column(name="ingestion_provider",nullable=false,length=40) private JobIngestionProvider ingestionProvider;
+    @Column(name="origin_publisher",length=80) private String originPublisher;
+    @Column(name="discovery_query",length=500) private String discoveryQuery;
+    @Column(name="external_event_id") private UUID externalEventId;
+    @Column(name="extraction_recipe_version",length=80) private String extractionRecipeVersion;
 
     protected JobPosting() {}
     JobPosting(NormalizedJob value, UUID runId, String idempotencyKey, Instant now) {
         this.id=UUID.randomUUID(); sourceId=value.sourceId(); sourceType=value.sourceType(); externalId=value.externalId();
         firstSeenAt=now; lastSeenAt=now; lastSeenRunId=runId; manualIdempotencyKey=idempotencyKey;
-        apply(value); status=value.initialStatus(); sourceContentHash=value.contentHash();
+        apply(value); applyProvenance(value); status=value.initialStatus(); sourceContentHash=value.contentHash();
     }
     private void apply(NormalizedJob v) {
         company=v.company();title=v.title();location=v.location();countryCode=v.countryCode();workplaceType=v.workplaceType();
@@ -67,8 +72,13 @@ class JobPosting extends MutableEntity {
         salaryInterval=v.salaryInterval();publishedAt=v.publishedAt();sourceUpdatedAt=v.sourceUpdatedAt();expiresAt=v.expiresAt();
         fingerprint=v.fingerprint();contentHash=v.contentHash();
     }
+    private void applyProvenance(NormalizedJob v) {
+        ingestionProvider=v.ingestionProvider();originPublisher=v.originPublisher();discoveryQuery=v.discoveryQuery();
+        externalEventId=v.externalEventId();extractionRecipeVersion=v.extractionRecipeVersion();
+    }
     boolean observeProvider(NormalizedJob value, UUID runId, Instant now) {
         lastSeenAt=now;lastSeenRunId=runId;missingSuccessfulRunCount=0;
+        applyProvenance(value);
         var previousExpiry=expiresAt;
         boolean changed=!sourceContentHash.equals(value.contentHash());
         if(changed){
@@ -109,4 +119,7 @@ class JobPosting extends MutableEntity {
     int missingSuccessfulRunCount(){return missingSuccessfulRunCount;} String fingerprint(){return fingerprint;} String contentHash(){return contentHash;}
     String sourceContentHash(){return sourceContentHash;} JobPostingStatus status(){return status;} boolean manuallyEdited(){return manuallyEdited;}
     boolean sourceUpdateAvailable(){return sourceUpdateAvailable;} UUID lastSeenRunId(){return lastSeenRunId;}
+    JobIngestionProvider ingestionProvider(){return ingestionProvider;}String originPublisher(){return originPublisher;}
+    String discoveryQuery(){return discoveryQuery;}UUID externalEventId(){return externalEventId;}
+    String extractionRecipeVersion(){return extractionRecipeVersion;}
 }

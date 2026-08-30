@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.amit.jobagent.job.EmploymentType;
 import com.amit.jobagent.job.JobCandidate;
+import com.amit.jobagent.job.JobIngestionProvider;
 import com.amit.jobagent.job.JobSourceType;
 import com.amit.jobagent.job.WorkplaceType;
 import com.amit.jobagent.jobsource.connector.RawJobRecord;
@@ -77,6 +78,21 @@ class JobSourceNormalizerTest {
         assertThat(plain.company()).isEqualTo("Explicit company");
         assertThat(plain.description()).isEqualTo("Plain description");
         assertThat(plain.descriptionHtml()).isFalse();
+    }
+
+    @Test
+    void careerAdapterRecordsDeliveryAndOriginalHostProvenance() {
+        var context = new JobSourceRunContext(RUN_ID, SOURCE_ID, "Example Company", JobSourceType.CAREER_SITE,
+                JobSourceConnectorType.SMARTRECRUITERS, "ExampleCompany", SourceRegion.DEFAULT,
+                "https://jobs.smartrecruiters.com/ExampleCompany", "jobs.smartrecruiters.com",
+                50, 20, 2, JobSourceRunCoverage.COMPLETE_INVENTORY);
+
+        JobCandidate candidate = new SmartRecruitersJobSourceNormalizer().normalize(
+                raw("Example Company", "REMOTE", "FULL_TIME", "IN", null, null), context);
+
+        assertThat(candidate.ingestionProvider()).isEqualTo(JobIngestionProvider.SMARTRECRUITERS);
+        assertThat(candidate.originPublisher()).isEqualTo("jobs.smartrecruiters.com");
+        assertThat(candidate.sourceType()).isEqualTo(JobSourceType.CAREER_SITE);
     }
 
     private static JobSourceRunContext context(JobSourceType sourceType, String displayName) {

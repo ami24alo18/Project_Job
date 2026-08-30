@@ -6,7 +6,12 @@ export const defaultJobSourceInput: JobSourceInput = {
 }
 
 export function sourceToInput(source: JobSourceConfiguration): JobSourceInput {
-  return { displayName: source.displayName, sourceType: source.sourceType, providerIdentifier: source.providerIdentifier, region: source.region, enabled: source.enabled, pageSize: source.pageSize, maximumPagesPerRun: source.maximumPagesPerRun, missingRunThreshold: source.missingRunThreshold, recordVersion: source.recordVersion }
+  const sourceType = isConfiguredFeedSource(source) ? source.sourceType : 'LEVER'
+  return { displayName: source.displayName, sourceType, providerIdentifier: source.providerIdentifier, region: source.region, enabled: source.enabled, pageSize: source.pageSize, maximumPagesPerRun: source.maximumPagesPerRun, missingRunThreshold: source.missingRunThreshold, recordVersion: source.recordVersion }
+}
+
+export function isConfiguredFeedSource(source: JobSourceConfiguration): source is JobSourceConfiguration & { sourceType: JobSourceInput['sourceType'] } {
+  return source.sourceType === 'LEVER' || source.sourceType === 'GREENHOUSE' || source.sourceType === 'EMAIL_WEBHOOK'
 }
 
 export function regionsFor(sourceType: JobSourceInput['sourceType']): SourceRegion[] {

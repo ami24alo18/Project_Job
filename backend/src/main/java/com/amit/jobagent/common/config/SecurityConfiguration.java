@@ -22,9 +22,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfiguration {
     @Bean
     @Order(1)
-    SecurityFilterChain emailWebhookSecurityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain webhookSecurityFilterChain(HttpSecurity http) throws Exception {
         return http
-                .securityMatcher("/api/v1/job-sources/email-alert/events")
+                .securityMatcher(
+                        "/api/v1/job-sources/email-alert/events",
+                        "/api/v1/job-sources/*/external-events")
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -79,7 +81,8 @@ public class SecurityConfiguration {
         configuration.setAllowedOrigins(List.of(properties.allowedFrontendOrigin()));
         configuration.setAllowedMethods(List.of(HttpMethod.GET.name(), HttpMethod.POST.name(), HttpMethod.PUT.name(), HttpMethod.OPTIONS.name()));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept",
-                "X-N8N-WEBHOOK-SECRET", "X-N8N-Automation", "Idempotency-Key"));
+                "X-N8N-WEBHOOK-SECRET", "X-Job-Agent-Webhook-Token",
+                "X-N8N-Automation", "Idempotency-Key"));
         configuration.setMaxAge(3600L);
         var source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
