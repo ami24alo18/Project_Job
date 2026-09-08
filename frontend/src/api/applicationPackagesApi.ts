@@ -36,7 +36,8 @@ type RawRevision = Partial<ApplicationPackageRevision> & {
 }
 type RawSummary = Partial<ApplicationPackageSummary>
 type RawDetail = RawSummary & Omit<Partial<ApplicationPackageDetail>, 'currentRevision'> & { currentRevision?: RawRevision }
-const APPLICATION_GENERATION_TIMEOUT_MS = 180_000
+// CPU-only local models can need several minutes for a grounded structured draft.
+const APPLICATION_GENERATION_TIMEOUT_MS = 920_000
 
 export function createApplicationPackageIdempotencyKey(): string {
   return globalThis.crypto?.randomUUID?.() ?? `application-package-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -161,6 +162,7 @@ function normalizeRevision(raw: RawRevision): ApplicationPackageRevision {
     artifacts: (raw.artifacts ?? []).map(artifact => normalizeArtifact(artifact, id, createdAt)),
     warnings: raw.warnings ?? [],
     unsupportedRequirements: raw.unsupportedRequirements ?? [],
+    matchComparison: raw.matchComparison,
   }
 }
 

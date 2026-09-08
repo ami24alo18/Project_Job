@@ -124,18 +124,24 @@ AI content generation and n8n automation are disabled by default. In `local` and
 | Variable | Purpose | Example/default |
 | --- | --- | --- |
 | `APPLICATION_PACKAGE_AUTOMATION_ENABLED` | Allows eligible n8n-triggered package requests | `false` |
-| `OPENAI_CONTENT_GENERATION_ENABLED` | Enables provider-backed planning/writing | `false` |
-| `OPENAI_CONTENT_GENERATION_MODEL` | Content-generation model | `gpt-5.6-terra` |
-| `OPENAI_CONTENT_GENERATION_REASONING_EFFORT` | Provider reasoning effort | `low` |
-| `OPENAI_CONTENT_GENERATION_TIMEOUT` | One provider request timeout | `30s` |
-| `OPENAI_CONTENT_GENERATION_MAX_RETRIES` | Transient provider retry count; never unbounded | `1` |
+| `CONTENT_GENERATION_ENABLED` | Enables provider-backed planning/writing | `false` |
+| `CONTENT_GENERATION_PROVIDER` | Selects the `openai`, hosted `openrouter`, or local `ollama` adapter | `openai` |
+| `CONTENT_GENERATION_MODEL` | Content-generation model | `gpt-5.6-terra` |
+| `CONTENT_GENERATION_REASONING_EFFORT` | Provider reasoning effort; ignored by Ollama | `low` |
+| `CONTENT_GENERATION_TIMEOUT` | One provider request timeout | `30s` |
+| `CONTENT_GENERATION_MAX_RETRIES` | Transient provider retry count; never unbounded | `1` |
+| `OLLAMA_BASE_URL` | Ollama HTTP origin; use `http://host.docker.internal:11434` from Compose | `http://127.0.0.1:11434` |
+| `OPENROUTER_API_KEY` | OpenRouter API key; required only when the provider is `openrouter` | unset |
+| `OPENROUTER_BASE_URL` | Pinned official OpenRouter API base | `https://openrouter.ai/api/v1` |
+| `OPENROUTER_ALLOW_DATA_COLLECTION` | Allows free endpoints whose host may retain or train on request content | `false` |
+| `OLLAMA_TIMEOUT`, `OLLAMA_CONTEXT_WINDOW`, `OLLAMA_KEEP_ALIVE` | Local inference bounds | `600s` / `4096` / `15m` |
 | `CONTENT_GENERATION_DAILY_LIMIT` | Persisted daily revision ceiling for the current single-user deployment | `20` |
 | `CONTENT_GENERATION_MAX_INPUT_TOKENS` | Input-token guard | `24000` |
 | `CONTENT_GENERATION_MAX_OUTPUT_TOKENS` | Output-token guard | `8000` |
 | `CONTENT_GENERATION_MAX_INPUT_CHARACTERS` | Pre-provider character guard | `60000` |
 | `CONTENT_GENERATION_PROMPT_VERSION` | Immutable planning/writing prompt resource version | `v1` |
 | `CONTENT_GENERATION_SCHEMA_VERSION` | Strict output-schema version | `v1` |
-| `RESUME_TEMPLATE_VERSION` | Deterministic renderer/template version | `ats-single-column-v1` |
+| `RESUME_TEMPLATE_VERSION` | Deterministic renderer/template version | `master-resume-classic-v2` |
 | `OPENAI_API_KEY` | Shared backend-only provider credential | empty; required only when provider generation is enabled |
 
 Changing a prompt, schema, model, template, or relevant setting changes idempotency/cache identity and may make an older package stale. Versioned resources must not be edited in place after use.
@@ -165,7 +171,7 @@ npm ci
 npm run dev
 ```
 
-Open `/application-packages` after signing in. Every package page displays a persistent **Draft — not approved or submitted** notice. Provider-backed generation additionally requires an account-authorized key and explicit `OPENAI_CONTENT_GENERATION_ENABLED=true`; default tests never require a real key.
+Open `/application-packages` after signing in. Every package page displays a persistent **Draft — not approved or submitted** notice. OpenAI generation requires an account-authorized key. OpenRouter generation requires `OPENROUTER_API_KEY`, `CONTENT_GENERATION_PROVIDER=openrouter`, and a currently available model such as `z-ai/glm-5.2:free`. The OpenRouter path performs evidence selection locally and sends one hosted writing request when retries are zero. Set `OPENROUTER_ALLOW_DATA_COLLECTION=true` only after accepting that a free model host may retain or train on the submitted resume/job content. Local Ollama generation instead requires a running Ollama server, `CONTENT_GENERATION_ENABLED=true`, and `CONTENT_GENERATION_PROVIDER=ollama`; it never uses either hosted-provider key.
 
 ## n8n automation
 

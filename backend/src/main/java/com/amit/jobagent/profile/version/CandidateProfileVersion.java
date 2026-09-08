@@ -16,5 +16,5 @@ class CandidateProfileVersion {
  @Column(name="created_at",nullable=false,updatable=false)private Instant createdAt;
  protected CandidateProfileVersion(){}
  CandidateProfileVersion(UUID profileId,int number,String json,String checksum,String reason){id=UUID.randomUUID();this.profileId=profileId;versionNumber=number;snapshotJson=json;this.checksum=checksum;changeReason=reason;active=true;createdAt=Instant.now();}
- void deactivate(){active=false;}UUID id(){return id;}UUID profileId(){return profileId;}int versionNumber(){return versionNumber;}String snapshotJson(){return snapshotJson;}String checksum(){return checksum;}String changeReason(){return changeReason;}boolean active(){return active;}Instant createdAt(){return createdAt;}
+ void deactivate(){active=false;}void activate(){active=true;}UUID id(){return id;}UUID profileId(){return profileId;}int versionNumber(){return versionNumber;}String snapshotJson(){return snapshotJson;}String checksum(){return checksum;}String changeReason(){return changeReason;}boolean active(){return active;}Instant createdAt(){return createdAt;}
 }

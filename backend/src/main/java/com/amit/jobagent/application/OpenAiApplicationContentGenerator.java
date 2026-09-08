@@ -18,11 +18,11 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnProperty(name = "job-agent.content-generation.enabled", havingValue = "true")
+@ConditionalOnExpression("'${job-agent.content-generation.enabled:false}' == 'true' && '${job-agent.content-generation.provider:openai}' == 'openai'")
 class OpenAiApplicationContentGenerator implements ApplicationContentGenerator {
     private final OpenAIClient client;
     private final ContentGenerationProperties config;
@@ -148,7 +148,7 @@ class OpenAiApplicationContentGenerator implements ApplicationContentGenerator {
                 request.evaluationChecksum(),
                 request.jobTitle(),
                 request.company(),
-                "",
+                request.jobDescription(),
                 safe(request.facts()).stream().filter(fact -> selectedFactIds.contains(fact.id())).toList(),
                 safe(request.jobRequirements()).stream()
                         .filter(requirement -> selectedRequirementIds.contains(requirement.id()))

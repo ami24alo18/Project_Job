@@ -5,6 +5,7 @@
   "properties": {
     "contents": {
       "type": "array",
+      "maxItems": 12,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -24,14 +25,15 @@
               "APPLICATION_ANSWER"
             ]
           },
-          "key": { "type": "string" },
-          "order": { "type": "integer" },
-          "text": { "type": "string" }
+          "key": { "type": "string", "minLength": 1, "maxLength": 150 },
+          "order": { "type": "integer", "minimum": 0, "maximum": 50 },
+          "text": { "type": "string", "minLength": 1, "maxLength": 2500 }
         }
       }
     },
     "claims": {
       "type": "array",
+      "maxItems": 60,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -44,8 +46,8 @@
           "jobFieldReference"
         ],
         "properties": {
-          "contentKey": { "type": "string" },
-          "claimText": { "type": "string" },
+          "contentKey": { "type": "string", "minLength": 1, "maxLength": 150 },
+          "claimText": { "type": "string", "minLength": 1, "maxLength": 600 },
           "claimType": {
             "type": "string",
             "enum": ["CANDIDATE_FACT", "JOB_REFERENCE", "NON_FACTUAL"]

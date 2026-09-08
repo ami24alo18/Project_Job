@@ -49,6 +49,13 @@ function contentLabel(content: GeneratedContent) {
   return contentLabels[content.contentType] ?? content.contentType.replaceAll('_', ' ').toLowerCase()
 }
 
+function verificationLabel(content: GeneratedContent) {
+  if (content.verificationStatus === 'VERIFIED') return 'Evidence verified'
+  if (content.verificationStatus === 'PARTIALLY_VERIFIED') return 'Partially evidence-verified'
+  if (content.verificationStatus === 'UNVERIFIED') return 'Evidence not verified'
+  return 'Rejected'
+}
+
 function warningText(warning: GenerationWarning | string) {
   return typeof warning === 'string' ? warning : [warning.code, warning.message].filter(Boolean).join(': ')
 }
@@ -97,7 +104,9 @@ function ContentCard({ content, claims, editable, onUpdated, onEvidence, package
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
           <Typography variant="h6">{label}</Typography>
           {(content.userEdited || content.origin === 'USER_EDITED') && <Chip size="small" color="info" label="User edited" />}
-          <Chip size="small" variant="outlined" label={content.verificationStatus} color={content.verificationStatus === 'VERIFIED' ? 'success' : 'warning'} />
+          {!content.userEdited && content.origin === 'AI_GENERATED' && <Chip size="small" color="primary" variant="outlined" label="AI tailored" />}
+          {!content.userEdited && content.origin === 'DETERMINISTIC' && <Chip size="small" variant="outlined" label="Source fallback" />}
+          <Chip size="small" variant="outlined" label={verificationLabel(content)} color={content.verificationStatus === 'VERIFIED' ? 'success' : 'warning'} />
         </Stack>
         <Stack direction="row">
           {claims.length > 0 && <Button size="small" startIcon={<FactCheckIcon />} onClick={() => onEvidence(content.id)}>Evidence ({claims.length})</Button>}
@@ -137,6 +146,9 @@ export function ApplicationRevisionInspector({ packageId, revision, editable, pr
   const [downloadBusy, setDownloadBusy] = useState<DocumentArtifactType | null>(null)
   const [downloadError, setDownloadError] = useState('')
   const contents = useMemo(() => [...(revision.contents ?? [])].sort((a, b) => a.sectionOrder - b.sectionOrder || a.contentKey.localeCompare(b.contentKey)), [revision.contents])
+  const usedSafeDraft = revision.warnings?.some(warning => warningText(warning).includes('MODEL_GROUNDED_FALLBACK')) ?? false
+  const usedPartialFallback = revision.warnings?.some(warning => warningText(warning).includes('MODEL_PARTIAL_GROUNDED_FALLBACK')) ?? false
+  const candidateFactCount = useMemo(() => new Set(revision.claims.flatMap(claim => claim.sources.map(source => source.candidateFactId).filter((id): id is string => Boolean(id)))).size, [revision.claims])
   const visibleClaims = evidenceFor === '*' ? revision.claims : revision.claims.filter(claim => claim.generatedContentId === evidenceFor)
   const updateContent = (updated: GeneratedContent) => onRevisionChange({
     ...revision,
@@ -177,6 +189,27 @@ export function ApplicationRevisionInspector({ packageId, revision, editable, pr
       </Grid>
     </Paper>
 
+    {revision.matchComparison && <Paper variant="outlined" sx={{ p: 2 }}>
+      <Stack spacing={2}>
+        <Box>
+          <Typography variant="h6">Resume-to-JD match comparison</Typography>
+          <Typography variant="body2" color="text.secondary">Both documents are compared with the same {revision.matchComparison.method.startsWith('NBK_ATS') ? 'local NBK ATS semantic model' : 'keyword fallback method'}. This does not call OpenRouter or consume API tokens.</Typography>
+        </Box>
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, sm: 4 }}><Typography variant="overline">Current resume</Typography><Typography variant="h4">{revision.matchComparison.currentResumeScore}%</Typography></Grid>
+          <Grid size={{ xs: 12, sm: 4 }}><Typography variant="overline">AI-generated draft</Typography><Typography variant="h4">{revision.matchComparison.generatedDraftScore}%</Typography></Grid>
+          <Grid size={{ xs: 12, sm: 4 }}><Typography variant="overline">Change</Typography><Typography variant="h4" color={revision.matchComparison.scoreDelta > 0 ? 'success.main' : revision.matchComparison.scoreDelta < 0 ? 'error.main' : 'text.primary'}>{revision.matchComparison.scoreDelta > 0 ? '+' : ''}{revision.matchComparison.scoreDelta}</Typography></Grid>
+        </Grid>
+        {revision.matchComparison.matchedKeywords.length > 0 && <Box><Typography variant="subtitle2" gutterBottom>Matched JD keywords</Typography><Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">{revision.matchComparison.matchedKeywords.map(keyword => <Chip key={keyword} size="small" color="success" variant="outlined" label={keyword} />)}</Stack></Box>}
+        {revision.matchComparison.missingKeywords.length > 0 && <Box><Typography variant="subtitle2" gutterBottom>Important missing JD keywords</Typography><Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">{revision.matchComparison.missingKeywords.map(keyword => <Chip key={keyword} size="small" color="warning" variant="outlined" label={keyword} />)}</Stack></Box>}
+        <Typography variant="caption" color="text.secondary">Method: {revision.matchComparison.method}. This is a transparent comparison aid, not an employer ATS score or interview probability.</Typography>
+      </Stack>
+    </Paper>}
+
+    {usedPartialFallback && !usedSafeDraft && <Alert severity="info"><Typography fontWeight={600}>The usable AI-tailored sections were retained.</Typography>Sections that failed the evidence check were replaced individually with exact content from your active resume.</Alert>}
+
+    {usedSafeDraft && <Alert severity="warning"><Typography fontWeight={600}>The model response failed the evidence check, so an evidence-grounded draft was substituted.</Typography>This version preserves the usable résumé evidence and is safe to review. “Evidence verified” means the claims are supported; it is not a writing-quality score.</Alert>}
+    {revision.status !== 'FAILED' && candidateFactCount < 3 && <Alert severity="error" action={<Button color="inherit" size="small" href="/resume-documents">Check active resume</Button>}><Typography fontWeight={600}>This draft has only {candidateFactCount} usable résumé evidence {candidateFactCount === 1 ? 'item' : 'items'}.</Typography>Activate a text-based PDF or DOCX, re-evaluate the job to refresh its automatic snapshot, and then regenerate this draft.</Alert>}
     {(revision.warnings?.length ?? 0) > 0 && <Alert severity="warning"><Typography fontWeight={600}>Generation warnings</Typography><List dense disablePadding>{revision.warnings?.map((warning, index) => <ListItem key={index} disableGutters><ListItemText primary={warningText(warning)} /></ListItem>)}</List></Alert>}
     {(revision.unsupportedRequirements?.length ?? 0) > 0 && <Alert severity="warning"><Typography fontWeight={600}>Unsupported job requirements — not added as candidate skills</Typography><List dense disablePadding>{revision.unsupportedRequirements?.map((requirement, index) => <ListItem key={index} disableGutters><ListItemText primary={requirementText(requirement)} /></ListItem>)}</List></Alert>}
 
@@ -212,7 +245,7 @@ export function ApplicationRevisionInspector({ packageId, revision, editable, pr
     <Drawer anchor="right" open={evidenceFor !== null} onClose={() => setEvidenceFor(null)}>
       <Box role="dialog" aria-label="Evidence and provenance" sx={{ width: { xs: 320, sm: 480 }, maxWidth: '100vw', p: 3 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center"><Typography variant="h5">Evidence and provenance</Typography><Tooltip title="Close"><IconButton aria-label="Close evidence" onClick={() => setEvidenceFor(null)}>×</IconButton></Tooltip></Stack>
-        <Alert severity="info" sx={{ my: 2 }}>Candidate claims must point to verified facts from this exact immutable profile version.</Alert>
+        <Alert severity="info" sx={{ my: 2 }}>Candidate claims must point to evidence from the exact immutable resume snapshot used for this evaluation.</Alert>
         {visibleClaims.length === 0 ? <Typography color="text.secondary">No factual claims are attached to this section.</Typography> : visibleClaims.map(claim => <Paper key={claim.id} variant="outlined" sx={{ p: 2, mb: 2 }}>
           <Stack spacing={1}><Typography fontWeight={600}>{claim.claimText}</Typography><Stack direction="row" spacing={1} flexWrap="wrap"><Chip size="small" label={claim.claimType} /><Chip size="small" label={claim.validationStatus} color={claim.validationStatus === 'VALID' ? 'success' : 'warning'} /></Stack><Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>Content path: {claim.contentPath}</Typography>{claim.validationCodes.length > 0 && <Typography variant="body2">Validation: {claim.validationCodes.join(', ')}</Typography>}{claim.sources.length === 0 ? <Typography variant="body2" color="text.secondary">No source IDs (allowed only for explicitly non-factual language).</Typography> : claim.sources.map((source, index) => <Box key={index} sx={{ pl: 1, borderLeft: 3, borderColor: 'primary.light' }}>{source.candidateFactId && <Typography variant="body2">Candidate fact: {source.candidateFactId}</Typography>}{source.jobRequirementId && <Typography variant="body2">Job requirement: {source.jobRequirementId}</Typography>}{source.jobFieldReference && <Typography variant="body2">Job field: {source.jobFieldReference}</Typography>}</Box>)}</Stack>
         </Paper>)}

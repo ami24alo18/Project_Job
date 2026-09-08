@@ -52,6 +52,19 @@ class WorkerTests(unittest.TestCase):
         self.assertIsNone(captured["proxies"])
         self.assertFalse(captured["linkedin_fetch_description"])
 
+    def test_linkedin_requests_fetch_job_descriptions(self):
+        captured = {}
+        def scrape(**kwargs):
+            captured.update(kwargs)
+            return FakeFrame([{"site": "linkedin", "id": "li-1", "title": "Engineer", "company": "Example", "job_url": "https://example.com/1"}])
+        settings = Settings("x" * 32, frozenset({"linkedin"}), 32768, 2, 100, 120, 1)
+        request = validate_request({"requestId": "run-2", "sites": ["linkedin"], "query": "java"}, settings)
+
+        scrape_and_normalize(request, scrape)
+
+        self.assertTrue(captured["linkedin_fetch_description"])
+        self.assertIsNone(captured["proxies"])
+
     def test_rejects_credentials_and_unsafe_url_schemes(self):
         with self.assertRaises(RequestProblem): canonical_url("file:///etc/passwd")
         with self.assertRaises(RequestProblem): canonical_url("https://user:pass@example.com/job")

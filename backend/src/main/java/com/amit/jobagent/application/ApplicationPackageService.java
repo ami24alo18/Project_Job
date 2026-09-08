@@ -42,6 +42,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class ApplicationPackageService {
+    private static final Pattern DATE_RANGE_IN_TEXT = Pattern.compile(
+            "(?iu)(\\b(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\s+)?"
+                    + "(?:19|20)\\d{2}\\b\\s*[\\u2013\\u2014-]\\s*"
+                    + "(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\s+)?"
+                    + "(?:\\b(?:19|20)\\d{2}\\b|present))");
     private static final Set<JobPostingStatus> ELIGIBLE_JOB_STATUSES =
             Set.of(JobPostingStatus.READY_FOR_EVALUATION, JobPostingStatus.NEEDS_REVIEW);
 
@@ -62,6 +68,7 @@ public class ApplicationPackageService {
     private final VerifiedFactInputPolicy factInputPolicy;
     private final ApplicationContentGenerator generator;
     private final GeneratedContentValidator validator;
+    private final EvidenceBoundContentMerger contentMerger;
     private final ApplicationQuestionPolicy questionPolicy;
     private final ApplicationPackageRepository packages;
     private final ApplicationPackageRevisionRepository revisions;
@@ -92,6 +99,7 @@ public class ApplicationPackageService {
             VerifiedFactInputPolicy factInputPolicy,
             ApplicationContentGenerator generator,
             GeneratedContentValidator validator,
+            EvidenceBoundContentMerger contentMerger,
             ApplicationQuestionPolicy questionPolicy,
             ApplicationPackageRepository packages,
             ApplicationPackageRevisionRepository revisions,
@@ -120,6 +128,7 @@ public class ApplicationPackageService {
         this.factInputPolicy = factInputPolicy;
         this.generator = generator;
         this.validator = validator;
+        this.contentMerger = contentMerger;
         this.questionPolicy = questionPolicy;
         this.packages = packages;
         this.revisions = revisions;
@@ -154,8 +163,9 @@ public class ApplicationPackageService {
         var existing = requireOwned(packageId);
         var replay = replayAcceptedIdempotencyKey(existing.jobId, idempotencyKey, true);
         if (replay != null) return replay;
-        if (existing.currentRevisionId == null) throw new ConflictException("The package has no completed source revision");
-        if (contents.existsByRevisionIdAndUserEditedTrue(existing.currentRevisionId) && !safeRequest.replaceUserEdited()) {
+        if (existing.currentRevisionId != null
+                && contents.existsByRevisionIdAndUserEditedTrue(existing.currentRevisionId)
+                && !safeRequest.replaceUserEdited()) {
             throw new ConflictException("Regeneration would replace user-edited content; explicitly allow replacement");
         }
         return generate(existing.jobId, null, safeRequest.reason(), idempotencyKey, false, true, safeRequest.replaceUserEdited());
@@ -265,7 +275,7 @@ public class ApplicationPackageService {
                 storedClaims.stream().map(c -> {
                     var src = sourcesByClaim.getOrDefault(c.id, List.of());
                     return new GeneratedClaimAtom(contentById.get(c.contentId).key, c.text, c.type,
-                            src.stream().map(s -> s.factId).filter(Objects::nonNull).toList(),
+                            src.stream().map(GeneratedClaimSource::candidateEvidenceId).filter(Objects::nonNull).toList(),
                             src.stream().map(s -> s.requirementId).filter(Objects::nonNull).toList(),
                             src.stream().map(s -> s.jobField).filter(Objects::nonNull).findFirst().orElse(null));
                 }).toList(), List.of(), List.of());
@@ -356,7 +366,7 @@ public class ApplicationPackageService {
                         ClaimType.NON_FACTUAL, key, ClaimValidationStatus.VALID, "[]"));
                 var factual = claims.save(new GeneratedClaim(content.getId(), fact.statement(),
                         ClaimType.CANDIDATE_FACT, key, ClaimValidationStatus.VALID, "[]"));
-                claimSources.save(new GeneratedClaimSource(factual.id, fact.id(), null, null));
+                claimSources.save(GeneratedClaimSource.fromSnapshotEvidence(factual.id, fact.id()));
             }
             return questions.findByRevisionIdOrderByCreatedAtAscIdAsc(revision.id).stream()
                     .map(q -> new QuestionDraftResponse(q.id, q.question, q.classification, q.answer, q.answerStatus, q.confidence)).toList();
@@ -414,6 +424,10 @@ public class ApplicationPackageService {
         if (!generationProperties.templateVersion().equals(DeterministicResumeRenderer.TEMPLATE_VERSION)) {
             throw new DomainValidationException("The configured resume template version is not installed");
         }
+        if (isBlank(job.description())) {
+            throw new DomainValidationException(
+                    "Add the complete job description, save the job, and evaluate it again before generating a draft");
+        }
         if (!ELIGIBLE_JOB_STATUSES.contains(job.status()) || (job.expiresAt() != null && job.expiresAt().isBefore(Instant.now()))) {
             throw new DomainValidationException("Only active jobs can produce application packages");
         }
@@ -470,11 +484,19 @@ public class ApplicationPackageService {
                     output = attempt == 0
                             ? generator.generate(request, plan)
                             : generator.repair(request, plan, repairCodes);
+                    output = GeneratedContentNormalizer.normalize(output);
                 } catch (RuntimeException invalidOutput) {
                     if (attempt + 1 < attempts && repairableOutputFailure(invalidOutput)) {
                         repairCodes = List.of(safeErrorCode(invalidOutput));
                         repairCodes.forEach(metrics::validationFailed);
                         continue;
+                    }
+                    if (repairableOutputFailure(invalidOutput)) {
+                        repairCodes = List.of(safeErrorCode(invalidOutput));
+                        repairCodes.forEach(metrics::validationFailed);
+                        output = contentMerger.merge(output, request, plan, jobEvidence);
+                        validation = validator.validate(output, generationFacts, jobEvidence);
+                        break;
                     }
                     throw invalidOutput;
                 }
@@ -483,13 +505,20 @@ public class ApplicationPackageService {
                 validation.codes().forEach(metrics::validationFailed);
                 repairCodes = validation.codes();
             }
+            if (validation != null && !validation.valid() && output != null) {
+                output = contentMerger.merge(output, request, plan, jobEvidence);
+                validation = validator.validate(output, generationFacts, jobEvidence);
+                if (!validation.valid()) validation.codes().forEach(metrics::validationFailed);
+            }
             if (validation == null || !validation.valid()) {
                 throw new GenerationRejectedException("CONTENT_PROVENANCE_VALIDATION_FAILED",
                         validation == null ? "Generated content was empty" : String.join(",", validation.codes()));
             }
             setRevisionStatus(context.revisionId(), RevisionStatus.RENDERING);
             List<com.amit.jobagent.application.render.RenderedArtifact> rendered;
-            try { rendered = renderer.renderAll(toResumeModel(profile, job.title(), job.company(), output, generationFacts)); }
+            // The external model receives only privacy-safe facts. Rendering is local and must retain the
+            // complete immutable resume snapshot (for example, a project bullet carrying removable PDF footer noise).
+            try { rendered = renderer.renderAll(toResumeModel(profile, job.title(), job.company(), output, verifiedFacts)); }
             catch (RuntimeException renderingFailure) { metrics.renderingFailed(); throw renderingFailure; }
             for (var artifact : rendered) {
                 String key = storageKey(context.packageId(), context.revisionId(), artifact.fileName());
@@ -586,7 +615,18 @@ public class ApplicationPackageService {
         String message = Objects.toString(failure.getMessage(), "");
         return message.contains("CONTENT_GENERATION_INVALID_RESPONSE")
                 || message.contains("CONTENT_GENERATION_SCHEMA_VIOLATION")
-                || message.contains("CONTENT_GENERATION_EMPTY_RESPONSE");
+                || message.contains("CONTENT_GENERATION_EMPTY_RESPONSE")
+                || message.contains("CONTENT_GENERATION_OUTPUT_TRUNCATED");
+    }
+
+    private static GeneratedApplicationContent groundedFallback(
+            GeneratedApplicationContent generated,
+            ApplicationContentGenerationRequest request,
+            TailoringPlan plan) {
+        var seed = generated == null
+                ? new GeneratedApplicationContent(List.of(), List.of(), List.of(), List.of())
+                : generated;
+        return OllamaApplicationContentGenerator.groundRepair(seed, request, plan);
     }
 
     private List<String> validatePlan(TailoringPlan plan, List<VerifiedFactSnapshot> facts, Set<UUID> requirementIds) {
@@ -624,8 +664,10 @@ public class ApplicationPackageService {
             throw new ConflictException("Application-package revision is no longer awaiting rendering completion");
         }
         var savedByKey = new LinkedHashMap<String, GeneratedContent>();
-        ContentOrigin origin = generationProperties.enabled() ? ContentOrigin.AI_GENERATED : ContentOrigin.DETERMINISTIC;
         for (var item : output.contents()) {
+            ContentOrigin origin = generationProperties.enabled() && !item.key().startsWith("safe-")
+                    ? ContentOrigin.AI_GENERATED
+                    : ContentOrigin.DETERMINISTIC;
             var saved = contents.save(new GeneratedContent(revision.id, item.type(), item.key(), item.order(), item.text(),
                     origin, ContentVerificationStatus.VERIFIED));
             savedByKey.put(item.key(), saved);
@@ -636,7 +678,7 @@ public class ApplicationPackageService {
             var claim = claims.save(new GeneratedClaim(content.getId(), atom.claimText(), atom.claimType(), atom.contentKey(),
                     ClaimValidationStatus.VALID, "[]"));
             for (UUID factId : atom.factIds() == null ? List.<UUID>of() : atom.factIds()) {
-                claimSources.save(new GeneratedClaimSource(claim.id, factId, null, null));
+                claimSources.save(GeneratedClaimSource.fromSnapshotEvidence(claim.id, factId));
             }
             for (UUID requirementId : atom.requirementIds() == null ? List.<UUID>of() : atom.requirementIds()) {
                 claimSources.save(new GeneratedClaimSource(claim.id, null, requirementId, null));
@@ -667,7 +709,10 @@ public class ApplicationPackageService {
                 var revision = requireRevision(context.revisionId());
                 String code = exception instanceof GenerationRejectedException rejected
                         ? rejected.code : safeErrorCode(exception);
-                revision.fail(code, limit(safeErrorMessage(exception), 500));
+                String safeMessage = exception instanceof GenerationRejectedException
+                        ? exception.getMessage()
+                        : safeErrorMessage(exception);
+                revision.fail(code, limit(safeMessage, 500));
                 revisions.save(revision);
                 var applicationPackage = packages.findByIdForUpdate(context.packageId())
                         .orElseThrow(() -> new IllegalStateException("Application package disappeared during generation"));
@@ -857,32 +902,148 @@ public class ApplicationPackageService {
         }
         var contact = new ResumeContact(textRequired(core, "fullName"), textRequired(core, "email"),
                 text(core, "phone"), text(core, "currentLocation"), links);
-        Map<UUID, VerifiedFactSnapshot> byId = new LinkedHashMap<>();
-        facts.forEach(f -> byId.put(f.id(), f));
-        Map<String, VerifiedFactSnapshot> factByContent = new LinkedHashMap<>();
-        for (var claim : output.claims()) {
-            if (claim.factIds() != null && !claim.factIds().isEmpty()) factByContent.putIfAbsent(claim.contentKey(), byId.get(claim.factIds().getFirst()));
-        }
         String headline = output.contents().stream().filter(c -> c.type() == GeneratedContentType.RESUME_HEADLINE)
                 .map(GeneratedContentItem::text).findFirst().orElse(text(core, "professionalTitle"));
-        List<String> summary = output.contents().stream().filter(c -> c.type() == GeneratedContentType.PROFESSIONAL_SUMMARY)
-                .map(GeneratedContentItem::text).toList();
-        List<String> skills = output.contents().stream().filter(c -> c.type() == GeneratedContentType.SKILL_SECTION)
-                .flatMap(c -> Arrays.stream(c.text().split("[,;\\n]"))).map(String::trim).filter(s -> !s.isBlank()).distinct().toList();
+        boolean groundedFallback = output.warnings().contains("MODEL_GROUNDED_FALLBACK");
+        List<String> sourceSummary = factStatements(facts, "OTHER");
+        List<String> generatedSummary = output.contents().stream()
+                .filter(c -> c.type() == GeneratedContentType.PROFESSIONAL_SUMMARY)
+                .map(GeneratedContentItem::text).map(ApplicationPackageService::cleanResumeText)
+                .filter(s -> !s.isBlank()).toList();
+        List<String> summary = groundedFallback || generatedSummary.isEmpty() ? sourceSummary : generatedSummary;
+        List<String> generatedSkills = output.contents().stream()
+                .filter(c -> c.type() == GeneratedContentType.SKILL_SECTION)
+                .flatMap(c -> Arrays.stream(c.text().split("[;,\\n]"))).map(String::trim)
+                .filter(s -> !s.isBlank()).distinct().toList();
+        List<String> skills = !groundedFallback && !generatedSkills.isEmpty()
+                ? generatedSkills
+                : factStatements(facts, "SKILL");
+        if (skills.isEmpty()) skills = generatedSkills;
+        Map<UUID, String> tailoredByFact = tailoredTextByFact(output);
         return new ResumeDocumentModel(contact, role, company, headline, summary, skills,
-                entries(output, GeneratedContentType.EXPERIENCE_BULLET, factByContent, "Experience"),
-                entries(output, GeneratedContentType.PROJECT_BULLET, factByContent, "Project"),
-                entries(output, GeneratedContentType.EDUCATION_SECTION, factByContent, "Education"), LocalDate.now());
+                experienceEntries(facts, tailoredByFact),
+                projectEntries(facts, tailoredByFact),
+                educationEntries(facts, tailoredByFact), LocalDate.now());
     }
 
-    private List<ResumeEntry> entries(
-            GeneratedApplicationContent output, GeneratedContentType type,
-            Map<String, VerifiedFactSnapshot> factByContent, String fallbackTitle) {
-        return output.contents().stream().filter(c -> c.type() == type).map(c -> {
-            var fact = factByContent.get(c.key());
-            String dates = fact == null ? null : dateRange(fact.startDate(), fact.endDate());
-            return new ResumeEntry(fallbackTitle, fact == null ? null : fact.company(), null, dates, List.of(c.text()));
-        }).toList();
+    private static List<String> factStatements(List<VerifiedFactSnapshot> facts, String category) {
+        return facts.stream().filter(f -> category.equals(f.category()))
+                .map(VerifiedFactSnapshot::statement).map(ApplicationPackageService::cleanResumeText)
+                .filter(s -> !s.isBlank()).toList();
+    }
+
+    private static Map<UUID, String> tailoredTextByFact(GeneratedApplicationContent output) {
+        var contentByKey = new LinkedHashMap<String, GeneratedContentItem>();
+        output.contents().forEach(item -> contentByKey.put(item.key(), item));
+        var result = new LinkedHashMap<UUID, String>();
+        for (GeneratedClaimAtom claim : output.claims()) {
+            if (claim.claimType() != ClaimType.CANDIDATE_FACT || claim.factIds() == null || claim.factIds().size() != 1) continue;
+            GeneratedContentItem content = contentByKey.get(claim.contentKey());
+            if (content == null || !(content.type() == GeneratedContentType.EXPERIENCE_BULLET
+                    || content.type() == GeneratedContentType.PROJECT_BULLET
+                    || content.type() == GeneratedContentType.EDUCATION_SECTION)) continue;
+            String text = cleanResumeText(content.text());
+            if (!text.isBlank()) result.putIfAbsent(claim.factIds().getFirst(), text);
+        }
+        return result;
+    }
+
+    private static List<ResumeEntry> experienceEntries(
+            List<VerifiedFactSnapshot> facts, Map<UUID, String> tailoredByFact) {
+        var entries = new LinkedHashMap<String, ResumeEntryBuilder>();
+        String currentCompany = null;
+        for (VerifiedFactSnapshot fact : facts) {
+            if (!"EMPLOYMENT".equals(fact.category())) continue;
+            String company = cleanResumeText(fact.company());
+            if (!company.isBlank()) currentCompany = company;
+            if (currentCompany == null) continue;
+            var entry = entries.computeIfAbsent(currentCompany, ResumeEntryBuilder::new);
+            String original = cleanResumeText(fact.statement());
+            String value = cleanResumeText(tailoredByFact.getOrDefault(fact.id(), original));
+            if (employerHeader(original, currentCompany)) {
+                if (entry.dateRange == null) entry.dateRange = dateRangeFromText(original, currentCompany);
+            } else if (entry.title == null && looksLikeRoleTitle(original)) {
+                entry.title = original;
+            } else if (!value.isBlank()) {
+                entry.bullets.add(value);
+            }
+        }
+        return entries.values().stream().map(ResumeEntryBuilder::build).toList();
+    }
+
+    private static List<ResumeEntry> projectEntries(
+            List<VerifiedFactSnapshot> facts, Map<UUID, String> tailoredByFact) {
+        var entries = new ArrayList<ResumeEntry>();
+        String title = null;
+        var bullets = new ArrayList<String>();
+        for (VerifiedFactSnapshot fact : facts) {
+            if (!"PROJECT".equals(fact.category())) continue;
+            String original = cleanResumeText(fact.statement());
+            String value = cleanResumeText(tailoredByFact.getOrDefault(fact.id(), original));
+            if (title == null && original.length() <= 100 && !original.endsWith(".")) title = original;
+            else if (!value.isBlank()) bullets.add(value);
+        }
+        if (title != null || !bullets.isEmpty()) entries.add(new ResumeEntry(
+                title == null ? "Selected Project" : title, null, null, null, bullets));
+        return List.copyOf(entries);
+    }
+
+    private static List<ResumeEntry> educationEntries(
+            List<VerifiedFactSnapshot> facts, Map<UUID, String> tailoredByFact) {
+        String institution = null;
+        String degree = null;
+        String dates = null;
+        var bullets = new ArrayList<String>();
+        for (VerifiedFactSnapshot fact : facts) {
+            if (!"EDUCATION".equals(fact.category())) continue;
+            String original = cleanResumeText(fact.statement());
+            String value = cleanResumeText(tailoredByFact.getOrDefault(fact.id(), original));
+            if (institution == null) {
+                dates = dateRangeFromText(original, "");
+                String heading = DATE_RANGE_IN_TEXT.matcher(value).replaceFirst("").trim().replaceAll("[,.]$", "");
+                int separator = heading.indexOf(',');
+                institution = separator > 0 ? heading.substring(0, separator).trim() : heading;
+                degree = separator > 0 ? heading.substring(separator + 1).trim() : "Education";
+            } else if (!value.isBlank()) bullets.add(value);
+        }
+        return institution == null ? List.of() : List.of(new ResumeEntry(degree, institution, null, dates, bullets));
+    }
+
+    private static boolean employerHeader(String statement, String company) {
+        String lower = statement.toLowerCase(Locale.ROOT);
+        return lower.startsWith(company.toLowerCase(Locale.ROOT))
+                && (DATE_RANGE_IN_TEXT.matcher(statement).find() || lower.contains("present"));
+    }
+
+    private static boolean looksLikeRoleTitle(String statement) {
+        return statement.length() <= 100 && !statement.contains(".")
+                && statement.matches("(?iu).*(engineer|developer|architect|analyst|manager|lead|consultant|intern|specialist).*");
+    }
+
+    private static String dateRangeFromText(String statement, String prefix) {
+        var matcher = DATE_RANGE_IN_TEXT.matcher(statement);
+        if (matcher.find()) return matcher.group(1).replace('\u2013', '-').replace('\u2014', '-');
+        String remainder = prefix.isBlank() ? statement : statement.substring(Math.min(prefix.length(), statement.length())).trim();
+        return remainder.isBlank() ? null : remainder;
+    }
+
+    private static String cleanResumeText(String value) {
+        if (value == null) return "";
+        return value.replaceFirst("(?iu)\\s+(?:mailto:|tel:|https?://).*", "")
+                .replaceAll("\\s+", " ").trim();
+    }
+
+    private static final class ResumeEntryBuilder {
+        private final String company;
+        private String title;
+        private String dateRange;
+        private final List<String> bullets = new ArrayList<>();
+
+        private ResumeEntryBuilder(String company) { this.company = company; }
+
+        private ResumeEntry build() {
+            return new ResumeEntry(title == null ? "Software Engineer" : title, company, null, dateRange, bullets);
+        }
     }
 
     private String generationCacheKey(
@@ -897,6 +1058,7 @@ public class ApplicationPackageService {
                 generationProperties.promptVersion(), promptCatalog.promptChecksum,
                 generationProperties.schemaVersion(), promptCatalog.schemaChecksum,
                 String.valueOf(generationProperties.enabled()),
+                generationProperties.provider(),
                 generationProperties.model(), generationProperties.reasoningEffort(),
                 String.valueOf(generationProperties.timeout().toMillis()),
                 String.valueOf(generationProperties.maxRetries()),
@@ -949,14 +1111,13 @@ public class ApplicationPackageService {
     }
 
     private static String safeErrorCode(RuntimeException exception) {
-        String simple = exception.getClass().getSimpleName().replaceAll("[^A-Za-z0-9_]", "_").toUpperCase(Locale.ROOT);
-        return limit(isBlank(simple) ? "GENERATION_FAILED" : simple, 80);
+        return ApplicationGenerationFailure.code(exception);
     }
 
     private static String safeErrorMessage(RuntimeException exception) {
         if (exception instanceof GenerationRejectedException) return "Generated content did not pass deterministic validation";
         if (exception instanceof DomainValidationException || exception instanceof ConflictException) return exception.getMessage();
-        return "Application content generation failed safely";
+        return ApplicationGenerationFailure.message(exception);
     }
 
     private static String storageKey(UUID packageId, UUID revisionId, String fileName) {

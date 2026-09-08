@@ -112,6 +112,15 @@ export interface UnsupportedRequirement {
   reason?: string
 }
 
+export interface ResumeMatchComparison {
+  currentResumeScore: number
+  generatedDraftScore: number
+  scoreDelta: number
+  method: string
+  matchedKeywords: string[]
+  missingKeywords: string[]
+}
+
 export interface ApplicationPackageRevision {
   id: string
   packageId: string
@@ -138,6 +147,7 @@ export interface ApplicationPackageRevision {
   artifacts: DocumentArtifact[]
   warnings?: Array<GenerationWarning | string>
   unsupportedRequirements?: Array<UnsupportedRequirement | string>
+  matchComparison?: ResumeMatchComparison
 }
 
 export interface ApplicationPackageDetail extends ApplicationPackageSummary {

@@ -71,7 +71,7 @@ class OpenAiApplicationContentGeneratorTest {
     }
 
     @Test
-    void writingRequestUsesExactSchemaAndOnlyPlanSelectedSourceEvidence() throws Exception {
+    void writingRequestUsesExactSchemaSelectedResumeEvidenceAndFullJobDescription() throws Exception {
         Fixture fixture = fixture("""
                 {"contents":[],"claims":[],"warnings":[],"unsupportedRequirements":[]}
                 """);
@@ -113,14 +113,15 @@ class OpenAiApplicationContentGeneratorTest {
 
         JsonNode input = fixture.mapper.readTree(params.input().orElseThrow().asText());
         JsonNode source = input.path("source");
-        assertThat(source.path("jobDescription").textValue()).isEmpty();
+        assertThat(source.path("jobDescription").textValue())
+                .isEqualTo("Raw description containing an omitted requirement");
         assertThat(source.path("facts")).hasSize(1);
         assertThat(source.path("facts").get(0).path("id").textValue()).isEqualTo(FACT_ID.toString());
         assertThat(source.path("jobRequirements")).hasSize(1);
         assertThat(source.path("jobRequirements").get(0).path("id").textValue())
                 .isEqualTo(REQUIREMENT_ID.toString());
         assertThat(params.input().orElseThrow().asText())
-                .doesNotContain("Omitted candidate fact", "Omitted job requirement", "Raw description");
+                .doesNotContain("Omitted candidate fact", "Omitted job requirement");
     }
 
     @Test
@@ -162,7 +163,7 @@ class OpenAiApplicationContentGeneratorTest {
     }
 
     @Test
-    void boundedRepairSendsOnlySafeValidationCodesWithTheMinimizedSource() throws Exception {
+    void boundedRepairSendsOnlySafeValidationCodesWithSelectedEvidenceAndJobDescription() throws Exception {
         Fixture fixture = fixture("""
                 {"contents":[],"claims":[],"warnings":[],"unsupportedRequirements":[]}
                 """);
@@ -177,7 +178,7 @@ class OpenAiApplicationContentGeneratorTest {
         JsonNode input = fixture.mapper.readTree(params.input().orElseThrow().asText());
         assertThat(input.path("validationErrors").get(0).textValue())
                 .isEqualTo("UNSUPPORTED_NUMERIC_OR_DATE_VALUE");
-        assertThat(input.path("source").path("jobDescription").textValue()).isEmpty();
+        assertThat(input.path("source").path("jobDescription").textValue()).isEqualTo("Job description");
         verify(fixture.tracker).started(
                 eq("APPLICATION_CONTENT_REPAIR"), eq(params.input().orElseThrow().asText()), any());
     }
@@ -264,6 +265,7 @@ class OpenAiApplicationContentGeneratorTest {
     private static ContentGenerationProperties config() {
         return new ContentGenerationProperties(
                 true,
+                "openai",
                 false,
                 "gpt-5.6-terra",
                 "low",

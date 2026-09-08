@@ -60,14 +60,21 @@ Important settings are:
 | `CAREER_SITE_*` | DNS/redirect/body/parser/concurrency/rate/cache discovery bounds | See `.env.example` |
 | `CAREER_SITE_EXTRACTION_RECIPES_ENABLED` | Allows association of deployment-reviewed recipe metadata | `false`; no recipe runtime runs in Spring |
 | `APPLICATION_PACKAGE_AUTOMATION_ENABLED` | Allows only eligible n8n package requests; backend policy still applies | `false` |
-| `OPENAI_CONTENT_GENERATION_ENABLED` | Enables provider-backed Phase 5 planning/writing | `false` |
-| `OPENAI_CONTENT_GENERATION_MODEL`, `OPENAI_CONTENT_GENERATION_REASONING_EFFORT` | Phase 5 model and reasoning configuration | `gpt-5.6-terra` / `low` |
-| `OPENAI_CONTENT_GENERATION_TIMEOUT`, `OPENAI_CONTENT_GENERATION_MAX_RETRIES` | Bounded provider timeout and transient retry count | `30s` / `1` |
+| `CONTENT_GENERATION_ENABLED`, `CONTENT_GENERATION_PROVIDER` | Enables Phase 5 planning/writing and selects `openai`, `openrouter`, `huggingface`, or `ollama` | `false` / `openai` |
+| `CONTENT_GENERATION_MODEL`, `CONTENT_GENERATION_REASONING_EFFORT` | Phase 5 model and reasoning configuration | `gpt-5.6-terra` / `low` |
+| `CONTENT_GENERATION_TIMEOUT`, `CONTENT_GENERATION_MAX_RETRIES` | Bounded provider timeout and transient retry count | `30s` / `1` |
+| `OLLAMA_BASE_URL`, `OLLAMA_CONTEXT_WINDOW`, `OLLAMA_KEEP_ALIVE` | Local Ollama origin and bounded runtime settings | `http://127.0.0.1:11434` / `4096` / `15m` |
+| `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL` | OpenRouter credential and official OpenAI-compatible API base | unset / `https://openrouter.ai/api/v1` |
+| `OPENROUTER_ALLOW_DATA_COLLECTION` | Allows routing to model hosts that may retain or train on request content; often required by free endpoints | `false` |
+| `ATS_SCORING_ENABLED`, `ATS_SCORING_BASE_URL` | Enables the private résumé/JD semantic comparison worker | `true` / `http://ats-scoring-worker:8091` in Compose |
+| `ATS_SCORING_TOKEN` | Shared secret used only between the backend and private scoring worker | Must be replaced; at least 24 random characters recommended |
+| `ATS_SCORING_MAX_TOKENS`, `ATS_SCORING_TIMEOUT` | Per-document tokenizer bound and backend request timeout | `2048` / `60s` |
+| `OLLAMA_TIMEOUT` | Per-call local inference timeout (CPU generation may require several minutes) | `600s` |
 | `CONTENT_GENERATION_DAILY_LIMIT` | Persisted daily application-package generation ceiling | `20` |
-| `CONTENT_GENERATION_MAX_INPUT_TOKENS`, `CONTENT_GENERATION_MAX_OUTPUT_TOKENS` | Phase 5 token guards | `24000` / `8000` |
+| `CONTENT_GENERATION_MAX_INPUT_TOKENS`, `CONTENT_GENERATION_MAX_OUTPUT_TOKENS` | Phase 5 token guards | `24000` / `700` |
 | `CONTENT_GENERATION_MAX_INPUT_CHARACTERS` | Pre-provider Phase 5 input-size guard | `60000` |
-| `CONTENT_GENERATION_PROMPT_VERSION`, `CONTENT_GENERATION_SCHEMA_VERSION` | Immutable structured-generation resource versions | `v1` / `v1` |
-| `RESUME_TEMPLATE_VERSION` | Deterministic document-template identity | `ats-single-column-v1` |
+| `CONTENT_GENERATION_PROMPT_VERSION`, `CONTENT_GENERATION_SCHEMA_VERSION` | Immutable structured-generation resource versions | `v3` / `v2` |
+| `RESUME_TEMPLATE_VERSION` | Deterministic document-template identity | `master-resume-classic-v2` |
 
 Basic authentication is stateless and temporary. The frontend holds credentials only in memory, clears them on logout or any `401`, and requires sign-in again after a refresh. Use HTTPS at the reverse proxy for every non-local deployment because Basic credentials are only encoded, not encrypted.
 
@@ -102,18 +109,24 @@ Vite proxies `/api` to `http://localhost:8080`. Set `VITE_API_BASE_URL` only whe
 
 Leave `OPENAI_CONTENT_GENERATION_ENABLED=false` for normal local tests. The `local`/`test` profiles then use the deterministic verified-fact generator for an offline safety path; it is not model-equivalent tailoring. A real provider call requires explicit enablement and `OPENAI_API_KEY` in the backend environment only; never use a `VITE_` variable or an n8n field for that key. In Compose, Phase 5 values from `.env` are passed only to the backend service.
 
+For private local generation through Ollama, keep Ollama running on the host and set `CONTENT_GENERATION_ENABLED=true`, `CONTENT_GENERATION_PROVIDER=ollama`, `CONTENT_GENERATION_MODEL=qwen3.5:4b`, `CONTENT_GENERATION_PROMPT_VERSION=v3`, and `OLLAMA_BASE_URL=http://host.docker.internal:11434` for the Compose backend. The application deterministically selects extracted active-resume evidence, sends that evidence and the JD to Qwen in one structured generation call, validates every generated claim against the source facts, reports unsupported JD requirements as gaps, and renders accepted content with the fixed résumé template. Ollama generation is local and does not use `OPENAI_API_KEY` or `OPENROUTER_API_KEY`.
+
+For hosted open-model generation through Hugging Face, create a token with Inference Providers permission and set `HF_TOKEN`, `CONTENT_GENERATION_PROVIDER=huggingface`, and an available chat model such as `CONTENT_GENERATION_MODEL=Qwen/Qwen3-32B:cheapest`. The integration uses `https://router.huggingface.co/v1/chat/completions`, strict JSON-schema output, zero retries by default, and the same evidence validator. Hugging Face hosted inference has limited monthly experimentation credits and may require paid credits after they are exhausted; it is therefore opt-in and is not an unlimited-free replacement for local inference.
+
+For free hosted experimentation through OpenRouter, create an OpenRouter API key and set `OPENROUTER_API_KEY`, `CONTENT_GENERATION_ENABLED=true`, `CONTENT_GENERATION_PROVIDER=openrouter`, and `CONTENT_GENERATION_MODEL=z-ai/glm-5.2:free`. Planning is deterministic and local, so one draft request makes at most one model call when both retry settings are zero. The hosted call receives the selected resume evidence and full job description, while the same strict structured-output schema and evidence validator remain enforced. Free capacity and rate limits are controlled by OpenRouter. If the free endpoint has no privacy-compatible host, explicitly set `OPENROUTER_ALLOW_DATA_COLLECTION=true`; this sends resume and job content to a host that may retain or train on it, so do not enable it for data you are unwilling to share.
+
+Résumé match comparison uses the locally hosted `0xnbk/nbk-ats-semantic-v1-en` model. Compose downloads a revision-pinned quantized ONNX artifact while building `ats-scoring-worker`; runtime inference is offline, private to the Compose network, and does not consume OpenRouter tokens. The backend sends the same immutable JD to both the active-resume snapshot and generated résumé, displays both cosine-based percentages and their delta, and falls back to transparent keyword coverage only if the worker is unavailable. These values are comparison aids, not an employer ATS score or interview probability.
+
 ## Phase 2 workflow
 
 1. Sign in using the environment-backed application credentials.
 2. Create the core profile at `/profile`.
 3. Configure target titles, locations, skills, exclusions, thresholds, and daily limits at `/preferences`.
 4. Upload a genuine PDF or DOCX at `/resume-documents`, review extracted plain text, and activate one master resume.
-5. Create facts manually or import structured JSON at `/resume-facts`. Imports always remain `DRAFT`.
-6. Review and explicitly verify supported facts. Editing a verified fact resets it to `DRAFT`; rejected or archived facts must be restored before use.
-7. Add common answers at `/reusable-answers`. Compensation, demographic, and legal answers cannot be safe for autofill; work-authorization and relocation answers default to review.
-8. Publish at `/profile/versions`. Publication requires valid preferences, an active resume, and at least one verified fact. Identical content reuses the latest immutable version.
+5. Add common answers at `/reusable-answers`. Compensation, demographic, and legal answers cannot be safe for autofill; work-authorization and relocation answers default to review.
+6. Evaluate a job. Evaluation automatically creates an immutable resume snapshot; no manual profile publication is required.
 
-Future automation must consume an active published version, not mutable draft tables. Extracted resume text never becomes a fact automatically.
+Evaluation automatically creates an immutable candidate snapshot from the active resume's extracted text, profile, and preferences. Downstream matching and generation consume that exact snapshot rather than mutable tables or a later resume version.
 
 ## Phase 3 job ingestion
 
@@ -169,7 +182,7 @@ Provider API endpoints are derived from strict fixed-host allowlists. Guarded ca
 
 ## Phase 5 draft workflow
 
-1. Complete a Phase 4 evaluation for an active job and publish/retain the exact immutable profile version used by that evaluation.
+1. Activate a text-based PDF or DOCX resume and evaluate an active job. Evaluation automatically creates or reuses the exact immutable candidate snapshot used downstream.
 2. From the job/evaluation action or `/application-packages`, request a package. The backend accepts an `Idempotency-Key`; reuse it after an ambiguous timeout.
 3. Follow the returned `Location`. The bounded generation call currently returns its `202` response after generation finishes, although concurrent readers may observe `REQUESTED` or `GENERATING`. Reuse the same idempotency key after an ambiguous disconnect. A `READY` package is still a draft.
 4. Inspect structured resume content, cover letter, recruiter-message and question drafts, unsupported requirements, warnings, and the evidence/provenance view.

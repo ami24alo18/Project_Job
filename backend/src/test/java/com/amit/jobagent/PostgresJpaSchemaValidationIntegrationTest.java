@@ -63,7 +63,7 @@ class PostgresJpaSchemaValidationIntegrationTest {
     void bootsJpaAgainstTheFullyMigratedPostgresSchema() throws SQLException {
         assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(flyway.info().pending()).isEmpty();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("14");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("15");
 
         var jdbc = new JdbcTemplate(dataSource);
         List<String> appliedVersions = jdbc.queryForList(
@@ -74,7 +74,8 @@ class PostgresJpaSchemaValidationIntegrationTest {
                 ORDER BY installed_rank
                 """,
                 String.class);
-        assertThat(appliedVersions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14");
+        assertThat(appliedVersions).containsExactly(
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15");
 
         try (var connection = dataSource.getConnection()) {
             assertThat(connection.getMetaData().getDatabaseProductName()).isEqualTo("PostgreSQL");

@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -52,7 +54,11 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest(properties = {"spring.jpa.hibernate.ddl-auto=create-drop", "spring.flyway.enabled=false"})
+@SpringBootTest(properties = {
+        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "spring.flyway.enabled=false",
+        "job-agent.content-generation.max-retries=0"
+})
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class ApplicationPackageApiIntegrationTest {
@@ -118,6 +124,80 @@ class ApplicationPackageApiIntegrationTest {
             return null;
         }).when(storage).delete(anyString());
         when(storage.load(anyString())).thenAnswer(invocation -> storedObjects.get(invocation.getArgument(0)).clone());
+    }
+
+    @Test
+    void rejectsMissingJobDescriptionBeforeCallingTheGenerator() throws Exception {
+        UUID missingDescriptionJobId = UUID.fromString("54000000-0000-0000-0000-000000000099");
+        var job = new JobMatchingView(missingDescriptionJobId, "Example Systems", "Backend Engineer", "Example City",
+                WorkplaceType.HYBRID, EmploymentType.FULL_TIME, null,
+                Instant.parse("2027-01-01T00:00:00Z"), JOB_HASH, JobPostingStatus.READY_FOR_EVALUATION);
+        when(jobs.require(missingDescriptionJobId)).thenReturn(job);
+
+        mvc.perform(post("/api/v1/jobs/{jobId}/application-packages", missingDescriptionJobId)
+                        .with(httpBasic(USER, PASSWORD))
+                        .header("Idempotency-Key", "missing-description-does-not-spend-tokens")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(
+                        "Add the complete job description, save the job, and evaluate it again before generating a draft"));
+
+        verify(generator, times(0)).generate(any(ApplicationContentGenerationRequest.class), any(TailoringPlan.class));
+    }
+
+    @Test
+    @DirtiesContext(methodMode = DirtiesContext.MethodMode.BEFORE_METHOD)
+    void convertsUnsupportedModelProseIntoAValidatedGroundedRevisionWithoutAnotherModelCall() throws Exception {
+        var invalid = new GeneratedApplicationContent(
+                List.of(new GeneratedContentItem(
+                        GeneratedContentType.PROFESSIONAL_SUMMARY,
+                        "summary",
+                        0,
+                        "Architected unsupported Kubernetes platforms for Imaginary Corporation.")),
+                List.of(new GeneratedClaimAtom(
+                        "summary",
+                        "Architected unsupported Kubernetes platforms for Imaginary Corporation.",
+                        ClaimType.CANDIDATE_FACT,
+                        List.of(FACT_ID),
+                        List.of(),
+                        null)),
+                List.of(),
+                List.of());
+        doReturn(invalid).when(generator).generate(any(ApplicationContentGenerationRequest.class), any(TailoringPlan.class));
+
+        mvc.perform(post("/api/v1/jobs/{jobId}/application-packages", JOB_ID)
+                        .with(httpBasic(USER, PASSWORD))
+                        .header("Idempotency-Key", "invalid-model-grounded-fallback")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("READY"))
+                .andExpect(jsonPath("$.currentRevision.status").value("READY"))
+                .andExpect(jsonPath("$.currentRevision.warnings[0]").value("MODEL_GROUNDED_FALLBACK"))
+                .andExpect(jsonPath("$.currentRevision.contents.length()").value(5))
+                .andExpect(jsonPath("$.currentRevision.claims.length()").isNotEmpty());
+
+        verify(generator, times(1)).generate(any(ApplicationContentGenerationRequest.class), any(TailoringPlan.class));
+    }
+
+    @Test
+    @DirtiesContext(methodMode = DirtiesContext.MethodMode.BEFORE_METHOD)
+    void recoversFromTruncatedStructuredOutputWithoutCallingTheProviderAgain() throws Exception {
+        doThrow(new IllegalStateException("CONTENT_GENERATION_OUTPUT_TRUNCATED"))
+                .when(generator).generate(any(ApplicationContentGenerationRequest.class), any(TailoringPlan.class));
+
+        mvc.perform(post("/api/v1/jobs/{jobId}/application-packages", JOB_ID)
+                        .with(httpBasic(USER, PASSWORD))
+                        .header("Idempotency-Key", "truncated-model-grounded-fallback")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("READY"))
+                .andExpect(jsonPath("$.currentRevision.status").value("READY"))
+                .andExpect(jsonPath("$.currentRevision.warnings[0]").value("MODEL_GROUNDED_FALLBACK"));
+
+        verify(generator, times(1)).generate(any(ApplicationContentGenerationRequest.class), any(TailoringPlan.class));
     }
 
     @Test

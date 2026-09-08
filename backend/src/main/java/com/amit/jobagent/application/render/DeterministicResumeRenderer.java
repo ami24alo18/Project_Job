@@ -40,11 +40,12 @@ import org.springframework.stereotype.Component;
 /** Renders one canonical resume model into deterministic, single-column ATS formats. */
 @Component
 public final class DeterministicResumeRenderer {
-    public static final String TEMPLATE_VERSION = "ats-single-column-v1";
+    public static final String TEMPLATE_VERSION = "master-resume-classic-v2";
 
-    private static final int HALF_INCH_TWIPS = 720;
-    private static final BigInteger A4_WIDTH_TWIPS = BigInteger.valueOf(11_906);
-    private static final BigInteger A4_HEIGHT_TWIPS = BigInteger.valueOf(16_838);
+    private static final int PAGE_VERTICAL_MARGIN_TWIPS = 936;
+    private static final int PAGE_HORIZONTAL_MARGIN_TWIPS = 1_008;
+    private static final BigInteger LETTER_WIDTH_TWIPS = BigInteger.valueOf(12_240);
+    private static final BigInteger LETTER_HEIGHT_TWIPS = BigInteger.valueOf(15_840);
     private static final String PDF_PRODUCER = "Job Application Agent ATS Renderer";
 
     public List<RenderedArtifact> renderAll(ResumeDocumentModel model) {
@@ -150,19 +151,20 @@ public final class DeterministicResumeRenderer {
         html.append("""
                 </title>
                   <style>
-                    @page { size: A4; margin: 0.55in 0.65in; }
+                    @page { size: Letter; margin: 0.65in 0.70in; }
                     html, body { margin: 0; padding: 0; }
-                    body { color: #111111; font-family: Arial, Helvetica, sans-serif; font-size: 10pt; line-height: 1.28; }
+                    body { color: #111111; font-family: "Times New Roman", Times, serif; font-size: 9.5pt; line-height: 1.12; }
                     main { display: block; width: 100%; }
-                    h1 { font-size: 19pt; line-height: 1.1; margin: 0 0 3pt 0; font-weight: bold; }
-                    h2 { font-size: 11.5pt; margin: 10pt 0 4pt 0; padding: 0 0 2pt 0; border-bottom: 0.7pt solid #333333; text-transform: uppercase; }
-                    h3 { font-size: 10.5pt; margin: 6pt 0 1pt 0; font-weight: bold; }
-                    p { margin: 0 0 4pt 0; }
-                    ul { margin: 2pt 0 4pt 16pt; padding: 0; }
-                    li { margin: 0 0 2pt 0; padding: 0; }
-                    .contact, .target, .meta { font-size: 9pt; }
-                    .headline { font-size: 11pt; font-weight: bold; margin-top: 5pt; }
-                    .skills { margin-bottom: 3pt; }
+                    h1 { font-size: 22pt; line-height: 1.05; margin: 0 0 4pt 0; font-weight: normal; text-align: center; }
+                    h2 { font-size: 11pt; margin: 7pt 0 3pt 0; padding: 0 0 1pt 0; border-bottom: 0.55pt solid #333333; text-transform: none; }
+                    p { margin: 0 0 2pt 0; }
+                    ul { margin: 1pt 0 3pt 12pt; padding: 0; }
+                    li { margin: 0 0 1.2pt 0; padding: 0; }
+                    .contact { font-size: 9.5pt; text-align: center; margin-bottom: 5pt; }
+                    .skills { margin-bottom: 1pt; }
+                    .entry-head { margin: 3pt 0 0 0; font-weight: bold; }
+                    .entry-date { float: right; font-weight: normal; font-style: italic; }
+                    .entry-role { margin: 0; font-style: italic; }
                     .entry { display: block; page-break-inside: avoid; }
                   </style>
                 </head>
@@ -173,23 +175,13 @@ public final class DeterministicResumeRenderer {
         appendEscaped(html, model.contact().fullName());
         html.append("</h1>");
         appendContactHtml(html, model.contact());
-        html.append("<p class=\"target\">Target: ");
-        appendEscaped(html, model.targetRole());
-        html.append(" | Company: ");
-        appendEscaped(html, model.targetCompany());
-        html.append("</p>");
-        if (model.headline() != null) {
-            html.append("<p class=\"headline\">");
-            appendEscaped(html, model.headline());
-            html.append("</p>");
-        }
         html.append("</header>");
 
-        appendTextSection(html, "Professional Summary", model.summaryParagraphs());
+        appendTextSection(html, "Profile Summary", model.summaryParagraphs());
+        appendEntrySection(html, "Education", model.education());
         appendSkills(html, model.skills());
         appendEntrySection(html, "Experience", model.experience());
         appendEntrySection(html, "Projects", model.projects());
-        appendEntrySection(html, "Education", model.education());
         html.append("</main></body></html>");
         return html.toString();
     }
@@ -253,15 +245,11 @@ public final class DeterministicResumeRenderer {
             configureDocument(document, model);
             addName(document, model.contact().fullName());
             addContact(document, model.contact());
-            addBodyParagraph(document, "Target: " + model.targetRole() + " | Company: " + model.targetCompany(), 9, false);
-            if (model.headline() != null) {
-                addBodyParagraph(document, model.headline(), 11, true);
-            }
-            addTextSection(document, "PROFESSIONAL SUMMARY", model.summaryParagraphs());
+            addTextSection(document, "Profile Summary", model.summaryParagraphs());
+            addEntrySection(document, "Education", model.education());
             addSkills(document, model.skills());
-            addEntrySection(document, "EXPERIENCE", model.experience());
-            addEntrySection(document, "PROJECTS", model.projects());
-            addEntrySection(document, "EDUCATION", model.education());
+            addEntrySection(document, "Experience", model.experience());
+            addEntrySection(document, "Projects", model.projects());
             document.write(output);
             return canonicalizeDocxPackage(output.toByteArray(), model.artifactDate());
         } catch (Exception exception) {
@@ -307,13 +295,13 @@ public final class DeterministicResumeRenderer {
                 ? document.getDocument().getBody().getSectPr()
                 : document.getDocument().getBody().addNewSectPr();
         CTPageSz pageSize = section.isSetPgSz() ? section.getPgSz() : section.addNewPgSz();
-        pageSize.setW(A4_WIDTH_TWIPS);
-        pageSize.setH(A4_HEIGHT_TWIPS);
+        pageSize.setW(LETTER_WIDTH_TWIPS);
+        pageSize.setH(LETTER_HEIGHT_TWIPS);
         CTPageMar margins = section.isSetPgMar() ? section.getPgMar() : section.addNewPgMar();
-        margins.setTop(BigInteger.valueOf(HALF_INCH_TWIPS));
-        margins.setRight(BigInteger.valueOf(HALF_INCH_TWIPS));
-        margins.setBottom(BigInteger.valueOf(HALF_INCH_TWIPS));
-        margins.setLeft(BigInteger.valueOf(HALF_INCH_TWIPS));
+        margins.setTop(BigInteger.valueOf(PAGE_VERTICAL_MARGIN_TWIPS));
+        margins.setRight(BigInteger.valueOf(PAGE_HORIZONTAL_MARGIN_TWIPS));
+        margins.setBottom(BigInteger.valueOf(PAGE_VERTICAL_MARGIN_TWIPS));
+        margins.setLeft(BigInteger.valueOf(PAGE_HORIZONTAL_MARGIN_TWIPS));
         margins.setHeader(BigInteger.valueOf(360));
         margins.setFooter(BigInteger.valueOf(360));
         margins.setGutter(BigInteger.ZERO);
@@ -321,10 +309,10 @@ public final class DeterministicResumeRenderer {
 
     private static void addName(XWPFDocument document, String name) {
         XWPFParagraph paragraph = document.createParagraph();
-        paragraph.setAlignment(ParagraphAlignment.LEFT);
+        paragraph.setAlignment(ParagraphAlignment.CENTER);
         paragraph.setSpacingAfter(30);
         XWPFRun run = paragraph.createRun();
-        styleRun(run, 19, true);
+        styleRun(run, 22, false);
         setText(run, name);
     }
 
@@ -334,10 +322,7 @@ public final class DeterministicResumeRenderer {
         if (contact.phone() != null) {
             values.add(contact.phone());
         }
-        if (contact.location() != null) {
-            values.add(contact.location());
-        }
-        values.addAll(contact.profileLinks());
+        contact.profileLinks().forEach(link -> values.add(linkLabel(link)));
         addBodyParagraph(document, String.join(" | ", values), 9, false);
     }
 
@@ -353,8 +338,8 @@ public final class DeterministicResumeRenderer {
         if (skills.isEmpty()) {
             return;
         }
-        addSectionHeading(document, "SKILLS");
-        addBodyParagraph(document, String.join(", ", skills), 10, false);
+        addSectionHeading(document, "Technologies");
+        skills.forEach(skill -> addBodyParagraph(document, skill, 10, false));
     }
 
     private static void addEntrySection(XWPFDocument document, String title, List<ResumeEntry> entries) {
@@ -383,23 +368,17 @@ public final class DeterministicResumeRenderer {
         heading.setSpacingAfter(10);
         XWPFRun title = heading.createRun();
         styleRun(title, 10, true);
-        setText(title, entry.title());
-        if (entry.organization() != null) {
-            XWPFRun organization = heading.createRun();
-            styleRun(organization, 10, false);
-            setText(organization, " | " + entry.organization());
-        }
+        setText(title, entry.organization() == null ? entry.title() : entry.organization());
 
         List<String> metadata = new ArrayList<>();
         if (entry.location() != null) {
             metadata.add(entry.location());
         }
-        if (entry.dateRange() != null) {
-            metadata.add(entry.dateRange());
-        }
+        if (entry.dateRange() != null) metadata.add(entry.dateRange());
         if (!metadata.isEmpty()) {
             addBodyParagraph(document, String.join(" | ", metadata), 9, false);
         }
+        if (entry.organization() != null) addBodyParagraph(document, entry.title(), 10, false);
         entry.bullets().forEach(value -> addBullet(document, value));
     }
 
@@ -423,7 +402,7 @@ public final class DeterministicResumeRenderer {
     }
 
     private static void styleRun(XWPFRun run, int fontSize, boolean bold) {
-        run.setFontFamily("Arial");
+        run.setFontFamily("Times New Roman");
         run.setFontSize(fontSize);
         run.setBold(bold);
         run.setColor("111111");
@@ -452,10 +431,7 @@ public final class DeterministicResumeRenderer {
         if (contact.phone() != null) {
             values.add(contact.phone());
         }
-        if (contact.location() != null) {
-            values.add(contact.location());
-        }
-        values.addAll(contact.profileLinks());
+        contact.profileLinks().forEach(link -> values.add(linkLabel(link)));
         html.append("<p class=\"contact\">");
         for (int index = 0; index < values.size(); index++) {
             if (index > 0) {
@@ -485,14 +461,19 @@ public final class DeterministicResumeRenderer {
         if (skills.isEmpty()) {
             return;
         }
-        html.append("<section><h2>Skills</h2><p class=\"skills\">");
-        for (int index = 0; index < skills.size(); index++) {
-            if (index > 0) {
-                html.append(", ");
-            }
-            appendEscaped(html, skills.get(index));
+        html.append("<section><h2>Technologies</h2>");
+        for (String skill : skills) {
+            html.append("<p class=\"skills\">");
+            int colon = skill.indexOf(':');
+            if (colon > 0) {
+                html.append("<strong>");
+                appendEscaped(html, skill.substring(0, colon + 1));
+                html.append("</strong>");
+                appendEscaped(html, skill.substring(colon + 1));
+            } else appendEscaped(html, skill);
+            html.append("</p>");
         }
-        html.append("</p></section>");
+        html.append("</section>");
     }
 
     private static void appendEntrySection(StringBuilder html, String title, List<ResumeEntry> entries) {
@@ -507,29 +488,11 @@ public final class DeterministicResumeRenderer {
     }
 
     private static void appendEntry(StringBuilder html, ResumeEntry entry) {
-        html.append("<div class=\"entry\"><h3>");
-        appendEscaped(html, entry.title());
-        html.append("</h3>");
-        List<String> metadata = new ArrayList<>();
-        if (entry.organization() != null) {
-            metadata.add(entry.organization());
-        }
-        if (entry.location() != null) {
-            metadata.add(entry.location());
-        }
-        if (entry.dateRange() != null) {
-            metadata.add(entry.dateRange());
-        }
-        if (!metadata.isEmpty()) {
-            html.append("<p class=\"meta\">");
-            for (int index = 0; index < metadata.size(); index++) {
-                if (index > 0) {
-                    html.append(" | ");
-                }
-                appendEscaped(html, metadata.get(index));
-            }
-            html.append("</p>");
-        }
+        html.append("<div class=\"entry\"><p class=\"entry-head\">");
+        appendEscaped(html, entry.organization() == null ? entry.title() : entry.organization());
+        if (entry.dateRange() != null) { html.append("<span class=\"entry-date\">"); appendEscaped(html, entry.dateRange()); html.append("</span>"); }
+        html.append("</p>");
+        if (entry.organization() != null) { html.append("<p class=\"entry-role\">"); appendEscaped(html, entry.title()); html.append("</p>"); }
         if (!entry.bullets().isEmpty()) {
             html.append("<ul>");
             entry.bullets().forEach(value -> {
@@ -540,6 +503,14 @@ public final class DeterministicResumeRenderer {
             html.append("</ul>");
         }
         html.append("</div>");
+    }
+
+    private static String linkLabel(String value) {
+        String lower = value.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("linkedin.")) return "LinkedIn";
+        if (lower.contains("github.")) return "GitHub";
+        if (lower.contains("leetcode.")) return "LeetCode";
+        return "Portfolio";
     }
 
     private static void appendEscaped(StringBuilder html, String value) {

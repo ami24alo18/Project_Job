@@ -26,7 +26,13 @@ export function ApplicationPackageDetailPage() {
     return applicationPackagesApi.revisions(packageId).then(setRevisions, problem => setError(apiErrorMessage(problem, 'Revision history could not be loaded')))
   }, problem => { setError(apiErrorMessage(problem, 'Application package could not be loaded')); setItem(null) }).finally(() => setLoading(false)), [packageId])
   useEffect(() => { void load() }, [load])
-  const revision = item?.currentRevision
+  const latestAttempt = useMemo(
+    () => [...revisions].sort((left, right) => right.revisionNumber - left.revisionNumber)[0],
+    [revisions],
+  )
+  // A failed first generation is intentionally not promoted to currentRevision. Still surface
+  // that immutable attempt so the user can see its safe provider failure code and message.
+  const revision = item?.currentRevision ?? latestAttempt
   const revisionId = revision?.id
   const revisionStatus = revision?.status
   useEffect(() => {
@@ -53,14 +59,25 @@ export function ApplicationPackageDetailPage() {
     setItem(current => current ? { ...current, currentRevision: updated } : current)
   }
   const regenerate = async () => {
-    setBusy(true); setError(''); setMessage('')
+    setBusy(true); setError(''); setMessage('Generation is in progress. This dialog has been closed so you can continue to view the draft status.'); setDialogOpen(false)
     try {
       regenerationKey.current ??= createApplicationPackageIdempotencyKey()
       const updated = await applicationPackagesApi.regenerate(packageId, { replaceUserEdited, reason: reason.trim() || undefined }, regenerationKey.current)
-      setItem(updated); setDialogOpen(false); setReplaceUserEdited(false); setReason(''); setMessage('A new application-package revision was requested. Historical content remains available.')
+      setItem(updated); setReplaceUserEdited(false); setReason(''); setMessage('A new application-package revision was created. Historical content remains available.')
       setPreviewHtml(undefined); setPreviewError(''); regenerationKey.current = null
       try { setRevisions(await applicationPackagesApi.revisions(packageId)) } catch { /* detail remains usable */ }
-    } catch (problem) { setError(apiErrorMessage(problem, 'Regeneration could not be requested')) }
+    } catch (problem) {
+      const fallback = apiErrorMessage(problem, 'Regeneration could not be requested')
+      try {
+        const failed = await applicationPackagesApi.get(packageId)
+        setItem(failed)
+        const failureMessage = failed.currentRevision?.failureMessage
+        const failureCode = failed.currentRevision?.failureCode
+        setError(failureMessage ? `${failureCode ? `${failureCode}: ` : ''}${failureMessage}` : fallback)
+        if (failed.status === 'FAILED') regenerationKey.current = null
+        try { setRevisions(await applicationPackagesApi.revisions(packageId)) } catch { /* detail remains usable */ }
+      } catch { setError(fallback) }
+    }
     finally { setBusy(false) }
   }
   const validate = async () => {

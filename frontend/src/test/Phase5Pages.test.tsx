@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '../api/apiClient'
 import { applicationPackagesApi } from '../api/applicationPackagesApi'
+import { evaluationsApi } from '../api/evaluationsApi'
 import { jobsApi } from '../api/jobsApi'
 import { ApplicationPackageDetailPage } from '../pages/ApplicationPackageDetailPage'
 import { ApplicationPackageRevisionPage } from '../pages/ApplicationPackageRevisionPage'
@@ -109,7 +110,7 @@ describe('Phase 5 application-package pages', () => {
     await waitFor(() => expect(save).toHaveBeenCalledWith('package-1', 'content-1', { text: updated.text, recordVersion: 0 }))
     expect(await screen.findByText(updated.text)).toBeInTheDocument()
     expect(screen.getByText('User edited')).toBeInTheDocument()
-    expect(screen.getByText('UNVERIFIED')).toBeInTheDocument()
+    expect(screen.getByText('Evidence not verified')).toBeInTheDocument()
     expect(screen.getByText('STALE SOURCES')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Download PDF' })).toBeDisabled()
   })
@@ -125,7 +126,19 @@ describe('Phase 5 application-package pages', () => {
     fireEvent.click(screen.getByLabelText(/I understand that regeneration will replace my edited content/i))
     fireEvent.change(screen.getByLabelText(/Regeneration reason/i), { target: { value: 'Re-target the role' } })
     fireEvent.click(screen.getByRole('button', { name: 'Replace edits and regenerate' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await waitFor(() => expect(regenerate).toHaveBeenCalledWith('package-1', { replaceUserEdited: true, reason: 'Re-target the role' }, expect.any(String)))
+  })
+
+  it('blocks draft generation without a job description before calling the API', async () => {
+    vi.spyOn(jobsApi, 'get').mockResolvedValue({ ...job, descriptionPlainText: undefined })
+    vi.spyOn(jobsApi, 'duplicates').mockResolvedValue([])
+    vi.spyOn(evaluationsApi, 'list').mockResolvedValue([{ id: 'evaluation-4', jobId: job.id, profileVersionId: 'profile-version-7', status: 'SUCCEEDED', stale: false, createdAt: '2026-08-22T09:59:00Z', completedAt: '2026-08-22T10:00:00Z' }])
+    const generate = vi.spyOn(applicationPackagesApi, 'generate')
+    render(<MemoryRouter initialEntries={['/jobs/job-1']}><Routes><Route path="/jobs/:jobId" element={<JobDetailPage />} /></Routes></MemoryRouter>)
+    expect(await screen.findByText(/This job has no description/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Generate application draft' })).toBeDisabled()
+    expect(generate).not.toHaveBeenCalled()
   })
 
   it('uses the authenticated API helper for PDF and DOCX downloads', async () => {
@@ -156,10 +169,11 @@ describe('Phase 5 application-package pages', () => {
   it('generates a draft from job detail and reuses its idempotency key on retry', async () => {
     vi.spyOn(jobsApi, 'get').mockResolvedValue(job)
     vi.spyOn(jobsApi, 'duplicates').mockResolvedValue([])
+    vi.spyOn(evaluationsApi, 'list').mockResolvedValue([{ id: 'evaluation-4', jobId: job.id, profileVersionId: 'profile-version-7', status: 'SUCCEEDED', stale: false, createdAt: '2026-08-22T09:59:00Z', completedAt: '2026-08-22T10:00:00Z' }])
     const generate = vi.spyOn(applicationPackagesApi, 'generate').mockRejectedValueOnce(new Error('temporary')).mockResolvedValue(detail)
     render(<MemoryRouter initialEntries={['/jobs/job-1']}><Routes><Route path="/jobs/:jobId" element={<JobDetailPage />} /><Route path="/application-packages/:packageId" element={<div>Created application draft route</div>} /></Routes></MemoryRouter>)
     fireEvent.click(await screen.findByRole('button', { name: 'Generate application draft' }))
-    expect(await screen.findByText(/completed evaluation and published profile version/i)).toBeInTheDocument()
+    expect(await screen.findByText(/application draft could not be generated/i)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Generate application draft' }))
     expect(await screen.findByText('Created application draft route')).toBeInTheDocument()
     expect(generate).toHaveBeenCalledTimes(2)

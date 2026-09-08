@@ -7,6 +7,8 @@ import com.amit.jobagent.application.ArtifactType;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.util.EnumMap;
@@ -49,6 +51,7 @@ class DeterministicResumeRendererTest {
         String html = new String(artifacts.get(ArtifactType.HTML_PREVIEW).bytes(), StandardCharsets.UTF_8);
         String htmlText = Jsoup.parse(html).text();
         assertExpectedText(htmlText);
+        assertThat(htmlText).doesNotContain("Target:", "Company:");
 
         byte[] pdfBytes = artifacts.get(ArtifactType.PDF_RESUME).bytes();
         assertThat(new String(pdfBytes, 0, 5, StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
@@ -103,10 +106,34 @@ class DeterministicResumeRendererTest {
         });
     }
 
+    @Test
+    void keepsAFullLengthMasterResumeOnOneLetterPage() throws Exception {
+        ResumeDocumentModel base = sampleModel();
+        String bullet = "Designed and delivered scalable backend microservices, improving response times by 30% while strengthening reliability, maintainability, and operational visibility.";
+        var experience = List.of(
+                new ResumeEntry("Software Engineer", "Nouveau Labs", null, "November 2025 - Present", List.of(bullet, bullet, bullet)),
+                new ResumeEntry("Senior Software Engineer", "ADITYA BIRLA CAPITAL", null, "February 2024 - November 2025", List.of(bullet, bullet, bullet)),
+                new ResumeEntry("Software Engineer", "ZestMoney", null, "June 2022 - February 2024", List.of(bullet, bullet, bullet)));
+        var model = new ResumeDocumentModel(base.contact(), base.targetRole(), base.targetCompany(), null,
+                List.of("Backend Developer with 4+ years of experience building scalable, high-performance systems using Java, Spring Boot, Python, and AWS. Proficient in microservices, distributed systems, cloud-native applications, AI-powered solutions, workflow automation, and intelligent APIs."),
+                List.of(
+                        "Coding Languages: Java, C++, Python, SQL, HTML",
+                        "AI & Automation: LLMs, AI Agents, Prompt Engineering, Workflow Automation, n8n, AI API Integration",
+                        "DB & Frameworks: MySQL, PostgreSQL, Redis, Spring, Spring Boot, Hibernate",
+                        "Tools/Concepts: RabbitMQ, Kafka, Git, GitLab, AWS, Data Structures & Algorithms, DBMS, Microservices"),
+                experience, base.projects(), base.education(), base.artifactDate());
+
+        byte[] pdfBytes = renderer.render(model, ArtifactType.PDF_RESUME).bytes();
+        Files.write(Path.of("target", "master-resume-preview.pdf"), pdfBytes);
+        try (var pdf = Loader.loadPDF(pdfBytes)) {
+            assertThat(pdf.getNumberOfPages()).isEqualTo(1);
+        }
+    }
+
     private static void assertExpectedText(String text) {
         assertThat(text)
                 .contains("Avery Example")
-                .contains("Platform Engineer")
+                .contains("Senior Software Engineer")
                 .contains("Fictional Labs")
                 .contains("Java 21")
                 .contains("PostgreSQL")
@@ -147,7 +174,7 @@ class DeterministicResumeRendererTest {
                 "Platform Engineer",
                 "Fictional Labs",
                 "Platform Engineer <script>alert(\"x\")</script> & Reliability",
-                List.of("Builds secure, observable systems from verified requirements."),
+                List.of("Builds secure, observable systems <script>alert(\"x\")</script> & Reliability."),
                 List.of("Java 21", "Spring Boot", "PostgreSQL"),
                 List.of(experience),
                 List.of(project),

@@ -24,7 +24,7 @@ class FlywayMigrationIntegrationTest {
     }
 
     @Test void migratesCleanDatabaseThroughUnifiedJobSourceFoundation()throws Exception{
-        var f=flyway(null);f.clean();var result=f.migrate();assertThat(result.targetSchemaVersion).isEqualTo("14");
+        var f=flyway(null);f.clean();var result=f.migrate();assertThat(result.targetSchemaVersion).isEqualTo("15");
         try(var c=POSTGRES.createConnection("");var s=c.prepareStatement("SELECT COUNT(*) FROM job_agent.job_posting")){
             assertThat(s.executeQuery().next()).isTrue();
         }
@@ -32,8 +32,8 @@ class FlywayMigrationIntegrationTest {
 
     @Test void migratesFromPhaseTwoBaseline()throws Exception{
         var baseline=flyway("2");baseline.clean();assertThat(baseline.migrate().targetSchemaVersion).isEqualTo("2");
-        var current=flyway(null);assertThat(current.migrate().targetSchemaVersion).isEqualTo("14");
-        assertThat(current.info().current().getVersion().getVersion()).isEqualTo("14");
+        var current=flyway(null);assertThat(current.migrate().targetSchemaVersion).isEqualTo("15");
+        assertThat(current.info().current().getVersion().getVersion()).isEqualTo("15");
     }
 
     @Test void createsPhaseFiveApplicationProvenanceAndArtifactSchema()throws Exception{
@@ -116,6 +116,27 @@ class FlywayMigrationIntegrationTest {
                 statement.setString(3,"n"+"a".repeat(299));statement.setString(4,"c".repeat(64));
                 assertThat(statement.executeUpdate()).isEqualTo(1);
             }
+        }
+    }
+
+    @Test void snapshotEvidenceHasDedicatedStorageWithoutWeakeningLegacyFactIntegrity()throws Exception{
+        var f=flyway(null);f.clean();f.migrate();
+        try(var c=POSTGRES.createConnection("");
+            var s=c.prepareStatement("""
+                    SELECT
+                      COUNT(*) FILTER (WHERE column_name = 'candidate_snapshot_evidence_id'),
+                      (SELECT COUNT(*)
+                         FROM pg_constraint constraint_definition
+                        WHERE constraint_definition.conrelid = 'job_agent.generated_claim_source'::regclass
+                          AND constraint_definition.contype = 'f'
+                          AND pg_get_constraintdef(constraint_definition.oid) LIKE '%candidate_fact_id%')
+                    FROM information_schema.columns
+                    WHERE table_schema = 'job_agent'
+                      AND table_name = 'generated_claim_source'
+                    """)){
+            var result=s.executeQuery();assertThat(result.next()).isTrue();
+            assertThat(result.getInt(1)).isEqualTo(1);
+            assertThat(result.getInt(2)).isEqualTo(1);
         }
     }
 

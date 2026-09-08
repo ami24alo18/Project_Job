@@ -56,10 +56,9 @@ const navigation = [
     links: [
       ['Profile', '/profile'],
       ['Preferences', '/preferences'],
-      ['Resume facts', '/resume-facts'],
       ['Reusable answers', '/reusable-answers'],
       ['Resume documents', '/resume-documents'],
-      ['Published versions', '/profile/versions'],
+      ['Resume snapshots', '/profile/versions'],
     ],
   },
 ] as const

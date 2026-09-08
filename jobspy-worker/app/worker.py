@@ -80,7 +80,7 @@ def scrape_and_normalize(request: dict[str, Any], scrape: Callable[..., Any] | N
         results_wanted=request["resultsWanted"], hours_old=request["hoursOld"],
         is_remote=request["remoteOnly"], job_type=request["jobType"],
         country_indeed=request["country"], description_format="markdown",
-        linkedin_fetch_description=False, proxies=None, verbose=0,
+        linkedin_fetch_description="linkedin" in request["sites"], proxies=None, verbose=0,
     )
     records = frame.to_dict(orient="records") if hasattr(frame, "to_dict") else list(frame)
     jobs, rejected = [], 0

@@ -29,7 +29,7 @@ class ApplicationGenerationMetrics {
     }
 
     void provider(long nanoseconds, Long inputTokens, Long outputTokens) {
-        registry.timer("job_agent.application.provider.duration", "provider", "openai", "model", config.model())
+        registry.timer("job_agent.application.provider.duration", "provider", config.provider(), "model", config.model())
                 .record(Duration.ofNanos(Math.max(0, nanoseconds)));
         if (inputTokens != null) registry.counter("job_agent.application.provider.tokens", "direction", "input", "model", config.model()).increment(inputTokens);
         if (outputTokens != null) registry.counter("job_agent.application.provider.tokens", "direction", "output", "model", config.model()).increment(outputTokens);

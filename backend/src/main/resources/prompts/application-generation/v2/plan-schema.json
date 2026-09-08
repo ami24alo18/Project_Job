@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["selectedFactIds", "selectedRequirementIds", "orderedSkills", "unsupportedRequirements", "omissions", "tone"],
+  "properties": {
+    "selectedFactIds": { "type": "array", "items": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" } },
+    "selectedRequirementIds": { "type": "array", "items": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" } },
+    "orderedSkills": { "type": "array", "items": { "type": "string" } },
+    "unsupportedRequirements": { "type": "array", "items": { "type": "string" } },
+    "omissions": { "type": "array", "items": { "type": "string" } },
+    "tone": { "type": "string" }
+  }
+}

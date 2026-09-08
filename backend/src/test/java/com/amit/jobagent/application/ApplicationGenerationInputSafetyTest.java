@@ -11,7 +11,7 @@ import org.springframework.core.io.ClassPathResource;
 
 class ApplicationGenerationInputSafetyTest {
     @Test
-    void writingStageReceivesOnlyFactsAndRequirementsSelectedByTheValidatedPlan() {
+    void writingStageReceivesTheJobDescriptionAndOnlyFactsAndRequirementsSelectedByTheValidatedPlan() {
         var omittedFact = fact("81000000-0000-0000-0000-000000000001", "Unselected safe fact");
         var selectedFact = fact("81000000-0000-0000-0000-000000000002", "Selected Java fact");
         var selectedRequirement = requirement(
@@ -43,7 +43,7 @@ class ApplicationGenerationInputSafetyTest {
         assertThat(selected.profileChecksum()).isEqualTo(request.profileChecksum());
         assertThat(selected.jobChecksum()).isEqualTo(request.jobChecksum());
         assertThat(selected.evaluationChecksum()).isEqualTo(request.evaluationChecksum());
-        assertThat(selected.jobDescription()).isEmpty();
+        assertThat(selected.jobDescription()).isEqualTo("Untrusted job description");
         assertThat(selected.facts()).containsExactly(selectedFact);
         assertThat(selected.jobRequirements()).containsExactly(selectedRequirement);
     }

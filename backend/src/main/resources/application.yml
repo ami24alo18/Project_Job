@@ -92,16 +92,40 @@ job-agent:
     max-input-characters: ${AI_MAX_INPUT_CHARACTERS:50000}
     max-jobs-per-batch: ${AI_MAX_JOBS_PER_BATCH:25}
   content-generation:
-    enabled: ${OPENAI_CONTENT_GENERATION_ENABLED:false}
+    enabled: ${CONTENT_GENERATION_ENABLED:${OPENAI_CONTENT_GENERATION_ENABLED:false}}
+    provider: ${CONTENT_GENERATION_PROVIDER:openai}
     automation-enabled: ${APPLICATION_PACKAGE_AUTOMATION_ENABLED:false}
-    model: ${OPENAI_CONTENT_GENERATION_MODEL:gpt-5.6-terra}
-    reasoning-effort: ${OPENAI_CONTENT_GENERATION_REASONING_EFFORT:low}
-    timeout: ${OPENAI_CONTENT_GENERATION_TIMEOUT:30s}
-    max-retries: ${OPENAI_CONTENT_GENERATION_MAX_RETRIES:1}
+    model: ${CONTENT_GENERATION_MODEL:${OPENAI_CONTENT_GENERATION_MODEL:gpt-5.6-terra}}
+    reasoning-effort: ${CONTENT_GENERATION_REASONING_EFFORT:${OPENAI_CONTENT_GENERATION_REASONING_EFFORT:low}}
+    timeout: ${CONTENT_GENERATION_TIMEOUT:${OPENAI_CONTENT_GENERATION_TIMEOUT:30s}}
+    max-retries: ${CONTENT_GENERATION_MAX_RETRIES:${OPENAI_CONTENT_GENERATION_MAX_RETRIES:1}}
     daily-limit: ${CONTENT_GENERATION_DAILY_LIMIT:20}
     max-input-tokens: ${CONTENT_GENERATION_MAX_INPUT_TOKENS:24000}
     max-output-tokens: ${CONTENT_GENERATION_MAX_OUTPUT_TOKENS:8000}
     max-input-characters: ${CONTENT_GENERATION_MAX_INPUT_CHARACTERS:60000}
     prompt-version: ${CONTENT_GENERATION_PROMPT_VERSION:v1}
     schema-version: ${CONTENT_GENERATION_SCHEMA_VERSION:v1}
-    template-version: ${RESUME_TEMPLATE_VERSION:ats-single-column-v1}
+    template-version: ${RESUME_TEMPLATE_VERSION:master-resume-classic-v2}
+  ollama-content-generation:
+    base-url: ${OLLAMA_BASE_URL:http://127.0.0.1:11434}
+    timeout: ${OLLAMA_TIMEOUT:600s}
+    max-retries: ${OLLAMA_MAX_RETRIES:0}
+    context-window: ${OLLAMA_CONTEXT_WINDOW:4096}
+    keep-alive: ${OLLAMA_KEEP_ALIVE:15m}
+  openrouter-content-generation:
+    base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}
+    timeout: ${OPENROUTER_TIMEOUT:120s}
+    max-retries: ${OPENROUTER_MAX_RETRIES:1}
+    http-referer: ${OPENROUTER_HTTP_REFERER:http://localhost:3000}
+    app-title: ${OPENROUTER_APP_TITLE:Job Application Agent}
+    allow-data-collection: ${OPENROUTER_ALLOW_DATA_COLLECTION:false}
+  huggingface-content-generation:
+    base-url: ${HUGGINGFACE_BASE_URL:https://router.huggingface.co/v1}
+    timeout: ${HUGGINGFACE_TIMEOUT:180s}
+    max-retries: ${HUGGINGFACE_MAX_RETRIES:0}
+  ats-scoring:
+    enabled: ${ATS_SCORING_ENABLED:true}
+    base-url: ${ATS_SCORING_BASE_URL:http://127.0.0.1:8091}
+    token: ${ATS_SCORING_TOKEN:}
+    timeout: ${ATS_SCORING_TIMEOUT:60s}
+    max-document-characters: ${ATS_SCORING_MAX_DOCUMENT_CHARACTERS:32000}

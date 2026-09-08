@@ -10,6 +10,7 @@ import com.amit.jobagent.profile.version.PublishedProfileSnapshot;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -139,13 +140,13 @@ class JobEvaluationAiProcessor {
                     VALUES (?,?,?,?,?,?,CAST(? AS jsonb),?,?)
                     """, UUID.randomUUID(), evaluationId, requirement.requirementText, requirement.requirementType,
                     requirement.category, requirement.matchStatus, json(safe(requirement.candidateFactIds)),
-                    requirement.jobEvidence, Instant.now());
+                    requirement.jobEvidence, Timestamp.from(Instant.now()));
         }
     }
 
     private UUID started() {
         UUID id = UUID.randomUUID();
-        Instant now = Instant.now();
+        Timestamp now = Timestamp.from(Instant.now());
         jdbc.update("""
                 INSERT INTO job_agent.llm_execution
                   (id,operation_type,provider,model,prompt_name,prompt_version,prompt_checksum,
@@ -159,7 +160,7 @@ class JobEvaluationAiProcessor {
         jdbc.update("""
                 UPDATE job_agent.llm_execution SET provider_response_id=?,request_completed_at=?,
                   latency_milliseconds=?,input_tokens=?,output_tokens=?,total_tokens=?,status='SUCCEEDED' WHERE id=?
-                """, result.responseId(), Instant.now(), result.latencyMilliseconds(), result.inputTokens(),
+                """, result.responseId(), Timestamp.from(Instant.now()), result.latencyMilliseconds(), result.inputTokens(),
                 result.outputTokens(), result.totalTokens(), id);
     }
 
@@ -167,7 +168,7 @@ class JobEvaluationAiProcessor {
         jdbc.update("""
                 UPDATE job_agent.llm_execution SET request_completed_at=?,status='FAILED',safe_error_code=?,
                   safe_error_message=? WHERE id=?
-                """, Instant.now(), "AI_PROVIDER_FAILURE", "AI evaluation provider request failed safely", id);
+                """, Timestamp.from(Instant.now()), "AI_PROVIDER_FAILURE", "AI evaluation provider request failed safely", id);
     }
 
     private String json(Object value) {
